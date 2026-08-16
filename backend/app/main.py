@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from app.core.config import settings
-from app.api.v1.endpoints import interventions, incidents, ws, events, zones, crowd_readings, risk, intelligence, auth, routing, simulation
+from app.api.v1.endpoints import interventions, incidents, ws, events, zones, crowd_readings, risk, intelligence, auth, routing, simulation, alerts
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -18,6 +18,7 @@ app.include_router(routing.router, prefix=f"{settings.API_V1_STR}/routing", tags
 app.include_router(simulation.router, prefix=f"{settings.API_V1_STR}/simulation", tags=["simulation"])
 app.include_router(interventions.router, prefix=f"{settings.API_V1_STR}/interventions", tags=["interventions"])
 app.include_router(incidents.router, prefix=f"{settings.API_V1_STR}/incidents", tags=["incidents"])
+app.include_router(alerts.router, prefix=f"{settings.API_V1_STR}/alerts", tags=["alerts"])
 app.include_router(ws.router, prefix=f"{settings.API_V1_STR}/ws", tags=["websocket"])
 
 @app.get("/")

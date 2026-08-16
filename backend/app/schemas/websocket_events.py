@@ -16,6 +16,7 @@ class WSEventType(str, Enum):
     PREDICTION_UPDATE = "PREDICTION_UPDATE"
     CROWD_INTELLIGENCE_UPDATE = "CROWD_INTELLIGENCE_UPDATE"
     CRITICAL_ZONE_ALERT = "CRITICAL_ZONE_ALERT"
+    ALERT_NOTIFICATION = "ALERT_NOTIFICATION"
 
 
 class AuthorityIntelligenceData(BaseModel):
@@ -37,3 +38,14 @@ class CitizenZoneAlertData(BaseModel):
     message: str
     recommended_action: Optional[str] = None
     trend: str
+
+class AlertNotificationData(BaseModel):
+    """Payload for ALERT_NOTIFICATION events sent to both Authority and Citizen clients."""
+    alert_id: int
+    zone_id: Optional[int]
+    severity: str
+    alert_type: str
+    title: str
+    message: str
+    target_role: str
+    created_at: str

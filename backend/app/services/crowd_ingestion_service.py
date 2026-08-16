@@ -97,10 +97,14 @@ class CrowdIngestionService:
         # 7. Build event-wide intelligence
         intelligence = await self._aggregate_intelligence(data.event_id)
 
-        # 8. Broadcast real-time updates via WebSockets
+        # 8. Alert generation and delivery
+        from app.services.alert_service import AlertService
+        alert_service = AlertService(self._db)
+        await alert_service.process_intelligence_and_broadcast(intelligence)
+
+        # 9. Broadcast real-time intelligence updates
         from app.services.realtime_event_service import RealtimeEventService
         realtime_service = RealtimeEventService()
-        # Fire-and-forget broadcast (or await directly since it catches exceptions)
         await realtime_service.process_intelligence_update(intelligence)
 
         return crowd_reading_response, risk_assessment, prediction_result, intelligence

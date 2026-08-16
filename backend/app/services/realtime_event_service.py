@@ -11,10 +11,12 @@ from app.schemas.crowd_intelligence import EventCrowdIntelligence, ZoneSummary
 from app.schemas.websocket_events import (
     WSEventType,
     AuthorityIntelligenceData,
-    CitizenZoneAlertData
+    CitizenZoneAlertData,
+    AlertNotificationData
 )
 from app.services.websocket_manager import manager
 from app.ai.risk_engine.models import RiskLevel
+from app.models.alert import Alert
 
 logger = logging.getLogger(__name__)
 
@@ -33,9 +35,7 @@ class RealtimeEventService:
             # 1. Always broadcast to Authority (dashboard)
             await self._broadcast_authority(intelligence)
             
-            # 2. Check each zone for necessary Citizen alerts
-            for zone_summary in intelligence.zone_summaries:
-                await self._evaluate_and_broadcast_citizen_zone(intelligence.event_id, zone_summary)
+            # 2. Citizen alerts are now handled by AlertService -> broadcast_alert
                 
         except Exception as e:
             logger.error(f"Error in RealtimeEventService processing: {e}", exc_info=True)
@@ -82,41 +82,33 @@ class RealtimeEventService:
         logger.info(f"Broadcasted Authority intelligence for event_id={intelligence.event_id}")
 
 
-    async def _evaluate_and_broadcast_citizen_zone(self, event_id: int, zone_summary: ZoneSummary):
-        """
-        Evaluates a zone's state and sends an alert to its citizens if needed.
-        We only alert for HIGH or CRITICAL risk.
-        """
-        if zone_summary.current_level not in (RiskLevel.HIGH, RiskLevel.CRITICAL):
-            return  # Normal/Elevated conditions do not spam citizen devices
-            
-        event_type = (
-            WSEventType.CRITICAL_ZONE_ALERT.value 
-            if zone_summary.current_level == RiskLevel.CRITICAL 
-            else WSEventType.RISK_UPDATE.value
-        )
-        
-        message = "Avoid this zone."
-        if zone_summary.surge_active:
-            message = "Surge detected. Please move away carefully."
-        elif zone_summary.bottleneck_active:
-            message = "Severe bottleneck ahead. Choose an alternate route."
-
-        payload_model = CitizenZoneAlertData(
-            risk_level=zone_summary.current_level.value,
-            risk_score=zone_summary.current_score,
-            message=message,
-            trend=zone_summary.trend.value,
-            recommended_action="EVACUATE" if zone_summary.current_level == RiskLevel.CRITICAL else "CAUTION"
+    async def broadcast_alert(self, alert: Alert):
+        """Broadcasts a persisted alert to appropriate WebSocket topics."""
+        payload_model = AlertNotificationData(
+            alert_id=alert.id,
+            zone_id=alert.zone_id,
+            severity=alert.severity.value,
+            alert_type=alert.alert_type.value,
+            title=alert.title,
+            message=alert.message,
+            target_role=alert.target_role.value,
+            created_at=alert.created_at.isoformat()
         )
         
         payload = payload_model.model_dump()
-        payload["event_id"] = event_id
-        payload["zone_id"] = zone_summary.zone_id
-
-        await manager.broadcast_citizen_zone(
-            zone_id=zone_summary.zone_id,
-            event_type=event_type,
-            payload=payload
-        )
-        logger.info(f"Broadcasted Citizen alert to zone_id={zone_summary.zone_id}")
+        payload["event_id"] = alert.event_id
+        
+        if alert.target_role.value == "CITIZEN" and alert.zone_id is not None:
+            payload["zone_id"] = alert.zone_id
+            await manager.broadcast_citizen_zone(
+                zone_id=alert.zone_id,
+                event_type=WSEventType.ALERT_NOTIFICATION.value,
+                payload=payload
+            )
+            logger.info(f"Broadcasted Citizen Alert {alert.id} to zone_id={alert.zone_id}")
+        elif alert.target_role.value == "AUTHORITY":
+            await manager.broadcast_authority(
+                event_type=WSEventType.ALERT_NOTIFICATION.value,
+                payload=payload
+            )
+            logger.info(f"Broadcasted Authority Alert {alert.id} for event_id={alert.event_id}")
