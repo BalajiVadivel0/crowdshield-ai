@@ -31,7 +31,7 @@ def upgrade() -> None:
         sa.Column('before_risk_score', sa.Float(), nullable=False),
         sa.Column('after_risk_score', sa.Float(), nullable=True),
         sa.Column('risk_reduction', sa.Float(), nullable=True),
-        sa.Column('affected_zones', postgresql.JSONB(astext_type=sa.Text()), nullable=False),
+        sa.Column('affected_zones', sa.JSON(), nullable=False),
         sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
         sa.Column('updated_at', sa.DateTime(timezone=True), nullable=False),
         sa.PrimaryKeyConstraint('id')

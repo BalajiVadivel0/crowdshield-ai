@@ -52,11 +52,13 @@ async def get_current_user(
     return user
 
 class RequireRole:
-    def __init__(self, required_role: UserRole):
-        self.required_role = required_role
+    def __init__(self, required_roles: list[UserRole] | UserRole):
+        if not isinstance(required_roles, list):
+            required_roles = [required_roles]
+        self.required_roles = required_roles
 
     async def __call__(self, current_user: User = Depends(get_current_user)) -> User:
-        if current_user.role != self.required_role:
+        if current_user.role not in self.required_roles:
             if current_user.role != UserRole.ADMIN:
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,

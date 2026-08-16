@@ -18,7 +18,7 @@ Fields:
 import enum
 from datetime import datetime
 
-from sqlalchemy import Column, DateTime, Enum, ForeignKey, Integer, String
+from sqlalchemy import Column, DateTime, Enum, ForeignKey, Integer, String, Boolean
 from sqlalchemy.orm import relationship
 
 from app.core.database import Base
@@ -46,6 +46,7 @@ class Zone(Base):
         default=ZoneStatus.ACTIVE,
         index=True,
     )
+    is_exit = Column(Boolean, default=False, nullable=False)
 
     created_at = Column(
         DateTime(timezone=True),
