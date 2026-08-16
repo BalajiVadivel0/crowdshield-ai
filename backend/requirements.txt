@@ -12,3 +12,9 @@ alembic>=1.11.0
 ultralytics>=8.0.0
 opencv-python-headless>=4.8.0
 numpy>=1.24.0
+# Security & Authentication
+passlib[bcrypt]>=1.7.4
+bcrypt==3.2.2
+python-jose[cryptography]>=3.3.0
+python-multipart>=0.0.9
+email-validator>=2.1.19

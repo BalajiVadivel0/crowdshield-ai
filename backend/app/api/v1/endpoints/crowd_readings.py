@@ -11,7 +11,7 @@ event-level intelligence.
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.dependencies import get_db
+from app.api.dependencies import get_db, get_current_user
 from app.schemas.crowd_reading import CrowdReadingCreate, CrowdReadingResponse
 from app.ai.risk_engine.models import RiskAssessment
 from app.ai.prediction_engine.models import PredictionResult
@@ -35,7 +35,7 @@ class IngestionResponse(BaseModel):
 router = APIRouter()
 
 
-@router.post("/", response_model=IngestionResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/", response_model=IngestionResponse, status_code=status.HTTP_201_CREATED, dependencies=[Depends(get_current_user)])
 async def create_crowd_reading(
     data: CrowdReadingCreate,
     db: AsyncSession = Depends(get_db),

@@ -16,7 +16,7 @@ from sqlalchemy import select, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 
-from app.api.dependencies import get_db
+from app.api.dependencies import get_db, require_authority
 from app.models.risk_assessment import RiskAssessmentRecord
 
 
@@ -53,7 +53,7 @@ class RiskAssessmentResponse(BaseModel):
 router = APIRouter()
 
 
-@router.get("/{event_id}/{zone_id}", response_model=RiskAssessmentResponse)
+@router.get("/{event_id}/{zone_id}", response_model=RiskAssessmentResponse, dependencies=[Depends(require_authority)])
 async def get_latest_risk(
     event_id: int,
     zone_id: int,

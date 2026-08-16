@@ -6,6 +6,8 @@ from fastapi.testclient import TestClient
 # Must import app and manager
 from app.main import app
 from app.services.websocket_manager import manager
+from app.core.security import create_access_token
+from app.models.user import UserRole
 
 @pytest.mark.asyncio
 async def test_full_phase2_websocket_pipeline(app):
@@ -51,9 +53,13 @@ async def test_full_phase2_websocket_pipeline(app):
     # 3. Connect WebSockets
     # We use TestClient.websocket_connect context managers
     
-    with client.websocket_connect(f"/api/v1/ws/auth-client?role=AUTHORITY") as auth_ws, \
-         client.websocket_connect(f"/api/v1/ws/cit-zone3?role=CITIZEN&zone_id={zone3_id}") as cit3_ws, \
-         client.websocket_connect(f"/api/v1/ws/cit-zone5?role=CITIZEN&zone_id={zone5_id}") as cit5_ws:
+    auth_token = create_access_token(data={"sub": "1", "role": UserRole.AUTHORITY.value})
+    cit3_token = create_access_token(data={"sub": "2", "role": UserRole.CITIZEN.value})
+    cit5_token = create_access_token(data={"sub": "3", "role": UserRole.CITIZEN.value})
+    
+    with client.websocket_connect(f"/api/v1/ws/auth-client?token={auth_token}") as auth_ws, \
+         client.websocket_connect(f"/api/v1/ws/cit-zone3?token={cit3_token}&zone_id={zone3_id}") as cit3_ws, \
+         client.websocket_connect(f"/api/v1/ws/cit-zone5?token={cit5_token}&zone_id={zone5_id}") as cit5_ws:
              
         # 4. Ingest Crowd Reading (High Risk to Zone 3)
         reading_data = {

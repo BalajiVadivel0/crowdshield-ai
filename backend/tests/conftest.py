@@ -20,9 +20,10 @@ from fastapi.testclient import TestClient
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.core.database import Base
-from app.api.dependencies import get_db
+from app.api.dependencies import get_db, get_current_user
 import app.models  # Ensure all models are registered
 from app.main import app as _app
+from app.models.user import User, UserRole
 
 # Use in-memory SQLite for testing
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
@@ -55,8 +56,19 @@ def async_client():
 def app(db_session):
     async def override_get_db():
         yield db_session
+        
+    async def override_get_current_user():
+        # Mock an AUTHORITY user for legacy tests
+        user = User(
+            id=1,
+            email="test_authority@example.com",
+            hashed_password="mocked_hash",
+            role=UserRole.AUTHORITY
+        )
+        return user
 
     _app.dependency_overrides[get_db] = override_get_db
+    _app.dependency_overrides[get_current_user] = override_get_current_user
     yield _app
     _app.dependency_overrides.clear()
 

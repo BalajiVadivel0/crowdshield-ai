@@ -8,14 +8,14 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.dependencies import get_db
+from app.api.dependencies import get_db, require_authority, get_current_user
 from app.models.zone import Zone
 from app.schemas.zone import ZoneCreate, ZoneResponse
 
 router = APIRouter()
 
 
-@router.post("/", response_model=ZoneResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/", response_model=ZoneResponse, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_authority)])
 async def create_zone(
     zone_in: ZoneCreate,
     db: AsyncSession = Depends(get_db),
@@ -33,7 +33,7 @@ async def create_zone(
     return db_zone
 
 
-@router.get("/", response_model=List[ZoneResponse])
+@router.get("/", response_model=List[ZoneResponse], dependencies=[Depends(get_current_user)])
 async def list_zones(event_id: int = None, db: AsyncSession = Depends(get_db)):
     """List zones, optionally filtered by event_id."""
     query = select(Zone)
@@ -43,7 +43,7 @@ async def list_zones(event_id: int = None, db: AsyncSession = Depends(get_db)):
     return list(result.scalars().all())
 
 
-@router.get("/{zone_id}", response_model=ZoneResponse)
+@router.get("/{zone_id}", response_model=ZoneResponse, dependencies=[Depends(get_current_user)])
 async def get_zone(zone_id: int, db: AsyncSession = Depends(get_db)):
     """Get a specific zone."""
     result = await db.execute(select(Zone).where(Zone.id == zone_id))

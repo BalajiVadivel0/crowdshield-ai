@@ -11,14 +11,14 @@ CrowdIntelligenceService.
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.dependencies import get_db
+from app.api.dependencies import get_db, require_authority
 from app.schemas.crowd_intelligence import EventCrowdIntelligence
 from app.services.crowd_ingestion_service import CrowdIngestionService
 
 router = APIRouter()
 
 
-@router.get("/{event_id}", response_model=EventCrowdIntelligence)
+@router.get("/{event_id}", response_model=EventCrowdIntelligence, dependencies=[Depends(require_authority)])
 async def get_event_intelligence(
     event_id: int,
     db: AsyncSession = Depends(get_db),

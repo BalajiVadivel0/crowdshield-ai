@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from app.core.config import settings
-from app.api.v1.endpoints import interventions, incidents, ws, events, zones, crowd_readings, risk, intelligence
+from app.api.v1.endpoints import interventions, incidents, ws, events, zones, crowd_readings, risk, intelligence, auth
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -8,6 +8,7 @@ app = FastAPI(
     openapi_url=f"{settings.API_V1_STR}/openapi.json"
 )
 
+app.include_router(auth.router, prefix=f"{settings.API_V1_STR}/auth", tags=["auth"])
 app.include_router(events.router, prefix=f"{settings.API_V1_STR}/events", tags=["events"])
 app.include_router(zones.router, prefix=f"{settings.API_V1_STR}/zones", tags=["zones"])
 app.include_router(crowd_readings.router, prefix=f"{settings.API_V1_STR}/crowd-readings", tags=["crowd readings"])
