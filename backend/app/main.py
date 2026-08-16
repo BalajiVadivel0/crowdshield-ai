@@ -1,11 +1,16 @@
 from fastapi import FastAPI
 from app.core.config import settings
+from app.api.v1.endpoints import interventions, incidents, ws
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
     version=settings.VERSION,
     openapi_url=f"{settings.API_V1_STR}/openapi.json"
 )
+
+app.include_router(interventions.router, prefix=f"{settings.API_V1_STR}/interventions", tags=["interventions"])
+app.include_router(incidents.router, prefix=f"{settings.API_V1_STR}/incidents", tags=["incidents"])
+app.include_router(ws.router, prefix=f"{settings.API_V1_STR}/ws", tags=["websocket"])
 
 @app.get("/")
 def read_root():

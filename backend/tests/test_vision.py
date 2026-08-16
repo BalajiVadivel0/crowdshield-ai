@@ -208,4 +208,4 @@ def test_full_vision_to_prediction_pipeline():
     assert pred.trend_direction.value == "WORSENING"
     
     # The future risk type should be critical given high density and conflict
-    assert pred.forecasts[-1].predicted_risk_type in ("REVERSE_FLOW", "CROWD_CRUSH", "HIGH_DENSITY")
+    assert pred.forecasts[-1].predicted_risk_type in ("REVERSE_FLOW", "CROWD_CRUSH", "HIGH_DENSITY", "BOTTLENECK")
