@@ -24,7 +24,8 @@ class CrowdIntelligenceService:
         event_id: int,
         readings: List[CrowdReadingCreate],
         assessments: List[RiskAssessment],
-        predictions: List[PredictionResult]
+        predictions: List[PredictionResult],
+        active_incidents: List[any] = None  # Using any to avoid circular imports if IncidentReport is not imported
     ) -> EventCrowdIntelligence:
         """
         Produce a unified event-level intelligence object from current zone states.
@@ -60,7 +61,18 @@ class CrowdIntelligenceService:
         improving_zones = 0
         
         flags = set()
+        active_incidents = active_incidents or []
         
+        # Group incidents by zone_id
+        incidents_by_zone = {}
+        for inc in active_incidents:
+            if inc.zone_id not in incidents_by_zone:
+                incidents_by_zone[inc.zone_id] = []
+            incidents_by_zone[inc.zone_id].append(inc)
+
+        if active_incidents:
+            flags.add("INCIDENT_REPORTED")
+
         for z_id in valid_zone_ids:
             r = r_map[z_id]
             a = a_map[z_id]
@@ -101,6 +113,22 @@ class CrowdIntelligenceService:
             f_10 = next((f.predicted_score for f in p.forecasts if f.horizon_minutes == 10), a.score)
             f_15 = next((f.predicted_score for f in p.forecasts if f.horizon_minutes == 15), a.score)
             
+            # Incident processing
+            zone_incidents = incidents_by_zone.get(z_id, [])
+            z_active_incidents = len(zone_incidents)
+            z_incident_types = list(set(inc.incident_type.value for inc in zone_incidents))
+            
+            # Map severity to internal rank
+            severity_rank = {"CRITICAL": 4, "HIGH": 3, "MEDIUM": 2, "LOW": 1}
+            z_highest_severity = None
+            if zone_incidents:
+                highest_inc = max(zone_incidents, key=lambda i: severity_rank.get(i.severity.value, 0))
+                z_highest_severity = highest_inc.severity.value
+                
+            # Add specific type flags to event if present in this zone
+            for t in z_incident_types:
+                flags.add(f"{t}_REPORTED")
+            
             summary = ZoneSummary(
                 zone_id=z_id,
                 current_score=a.score,
@@ -119,7 +147,10 @@ class CrowdIntelligenceService:
                 predicted_10m_score=f_10,
                 predicted_15m_score=f_15,
                 time_to_critical=p.time_to_critical_minutes,
-                urgency_score=urgency
+                urgency_score=urgency,
+                active_incidents=z_active_incidents,
+                incident_types=z_incident_types,
+                highest_incident_severity=z_highest_severity
             )
             zone_summaries.append(summary)
             

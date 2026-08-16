@@ -43,7 +43,7 @@ class IncidentService:
         result = await self.session.execute(query)
         return result.scalar_one_or_none()
 
-    async def list_incidents(self, event_id: Optional[int] = None, zone_id: Optional[int] = None) -> List[IncidentReport]:
+    async def list_incidents(self, event_id: Optional[int] = None, zone_id: Optional[int] = None, user_id: Optional[int] = None) -> List[IncidentReport]:
         """List incidents with optional filtering."""
         query = select(IncidentReport)
         
@@ -51,6 +51,8 @@ class IncidentService:
             query = query.where(IncidentReport.event_id == event_id)
         if zone_id is not None:
             query = query.where(IncidentReport.zone_id == zone_id)
+        if user_id is not None:
+            query = query.where(IncidentReport.user_id == user_id)
             
         result = await self.session.execute(query)
         return list(result.scalars().all())

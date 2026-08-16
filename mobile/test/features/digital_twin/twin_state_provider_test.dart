@@ -90,8 +90,8 @@ void main() {
     expect(radiusExit > radiusA, isTrue);
 
     // Intelligence joined
-    final summary = state.intelligence.zoneSummaries.first;
-    expect(summary.zoneId, 1);
-    expect(summary.personCount, 10);
+    final summary = state.intelligence?.zoneSummaries.first;
+    expect(summary?.zoneId, 1);
+    expect(summary?.personCount, 10);
   });
 }

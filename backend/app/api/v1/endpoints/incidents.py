@@ -27,23 +27,35 @@ async def create_incident(
 async def list_incidents(
     event_id: Optional[int] = None,
     zone_id: Optional[int] = None,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """List incident reports, optionally filtered by event or zone."""
     service = IncidentService(db)
-    return await service.list_incidents(event_id, zone_id)
+    
+    # If not authority, only return their own incidents
+    user_id_filter = None
+    if current_user.role != "AUTHORITY":
+        user_id_filter = current_user.id
+        
+    return await service.list_incidents(event_id, zone_id, user_id=user_id_filter)
 
 
 @router.get("/{incident_id}", response_model=IncidentReportResponse, dependencies=[Depends(get_current_user)])
 async def get_incident(
     incident_id: int,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """Get a specific incident report by ID."""
     service = IncidentService(db)
     incident = await service.get_incident(incident_id)
     if not incident:
         raise HTTPException(status_code=404, detail="Incident not found")
+        
+    if current_user.role != "AUTHORITY" and incident.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Forbidden: You do not have access to this incident")
+        
     return incident
 
 

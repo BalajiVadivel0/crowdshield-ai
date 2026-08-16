@@ -97,15 +97,37 @@ class CrowdIngestionService:
         # 7. Build event-wide intelligence
         intelligence = await self._aggregate_intelligence(data.event_id)
 
-        # 8. Alert generation and delivery
+        # 8. Recommendation Generation
+        from app.services.recommendation_service import RecommendationService
+        from app.services.intervention_service import InterventionService
+        
+        intervention_svc = InterventionService(self._db)
+        rec_svc = RecommendationService(self._db, intervention_svc)
+        
+        active_recommendations = await rec_svc.generate_and_persist(intelligence)
+
+        # 9. Alert generation and delivery
         from app.services.alert_service import AlertService
         alert_service = AlertService(self._db)
         await alert_service.process_intelligence_and_broadcast(intelligence)
 
-        # 9. Broadcast real-time intelligence updates
+        # 10. Broadcast real-time intelligence updates
         from app.services.realtime_event_service import RealtimeEventService
         realtime_service = RealtimeEventService()
         await realtime_service.process_intelligence_update(intelligence)
+        
+        # 11. Broadcast real-time recommendations update
+        if active_recommendations:
+            from app.services.websocket_manager import manager
+            from app.schemas.websocket_events import WSEventType
+            payload = {
+                "event_id": intelligence.event_id,
+                "recommendation_ids": [r.id for r in active_recommendations]
+            }
+            await manager.broadcast_authority(
+                event_type=WSEventType.RECOMMENDATIONS_UPDATE.value,
+                payload=payload
+            )
 
         return crowd_reading_response, risk_assessment, prediction_result, intelligence
 
@@ -246,8 +268,30 @@ class CrowdIngestionService:
           - For each zone in the event, take the single most-recent CrowdReading
             and the most-recent RiskAssessmentRecord.
           - Re-run PredictionEngine per zone with its local history.
+          - Load recent active incidents.
           - Feed everything to CrowdIntelligenceService.
         """
+        from app.models.incident import IncidentReport, IncidentStatus
+        from datetime import timedelta
+        
+        # Load recent active incidents for this event
+        now_utc = datetime.now(timezone.utc)
+        two_hours_ago = now_utc - timedelta(hours=2)
+        
+        inc_result = await self._db.execute(
+            select(IncidentReport)
+            .where(
+                IncidentReport.event_id == event_id,
+                IncidentReport.status.in_([
+                    IncidentStatus.OPEN,
+                    IncidentStatus.ACKNOWLEDGED,
+                    IncidentStatus.INVESTIGATING
+                ]),
+                IncidentReport.created_at >= two_hours_ago
+            )
+        )
+        active_incidents = list(inc_result.scalars().all())
+
         # Find all unique zone IDs that have readings for this event
         result = await self._db.execute(
             select(CrowdReading.zone_id)
@@ -311,4 +355,4 @@ class CrowdIngestionService:
             assessments.append(assessment_pydantic)
             predictions.append(prediction)
 
-        return self._intelligence_service.aggregate(event_id, readings, assessments, predictions)
+        return self._intelligence_service.aggregate(event_id, readings, assessments, predictions, active_incidents=active_incidents)
