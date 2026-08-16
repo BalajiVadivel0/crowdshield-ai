@@ -21,6 +21,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.core.database import Base
 from app.api.dependencies import get_db
+import app.models  # Ensure all models are registered
 from app.main import app as _app
 
 # Use in-memory SQLite for testing
