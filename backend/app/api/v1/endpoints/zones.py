@@ -10,7 +10,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_db, require_authority, get_current_user
 from app.models.zone import Zone
-from app.schemas.zone import ZoneCreate, ZoneResponse
+from app.models.zone_connection import ZoneConnection
+from app.schemas.zone import ZoneCreate, ZoneResponse, ZoneConnectionResponse
 
 router = APIRouter()
 
@@ -39,6 +40,15 @@ async def list_zones(event_id: int = None, db: AsyncSession = Depends(get_db)):
     query = select(Zone)
     if event_id is not None:
         query = query.where(Zone.event_id == event_id)
+    result = await db.execute(query)
+    return list(result.scalars().all())
+
+
+@router.get("/connections/", response_model=List[ZoneConnectionResponse], dependencies=[Depends(get_current_user)])
+async def list_zone_connections(event_id: int, db: AsyncSession = Depends(get_db)):
+    """List zone connections for a specific event."""
+    # Since connections link zones, we query connections whose source_zone belongs to the event
+    query = select(ZoneConnection).join(Zone, ZoneConnection.source_zone_id == Zone.id).where(Zone.event_id == event_id)
     result = await db.execute(query)
     return list(result.scalars().all())
 

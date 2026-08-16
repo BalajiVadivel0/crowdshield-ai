@@ -20,3 +20,14 @@ class ZoneResponse(ZoneCreate):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class ZoneConnectionResponse(BaseModel):
+    id: int
+    source_zone_id: int
+    dest_zone_id: int
+    distance: float
+    capacity: int
+    is_bidirectional: bool
+
+    model_config = {"from_attributes": True}
