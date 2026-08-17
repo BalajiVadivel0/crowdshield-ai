@@ -67,3 +67,16 @@ class PredictionResult(BaseModel):
         default=None,
         description="Internal metrics supporting the prediction."
     )
+
+
+class PropagationResult(BaseModel):
+    """
+    Structured result of a single step of crowd propagation between two zones.
+    """
+    source_zone_id: str = Field(description="The zone generating outward pressure.")
+    destination_zone_id: str = Field(description="The downstream zone receiving flow.")
+    estimated_flow: float = Field(description="Estimated number of people transferring (flow rate per tick).")
+    propagation_time: float = Field(description="Simulation tick or horizon minutes where this flow occurs.")
+    source_pressure: float = Field(description="Calculated pressure of the source zone before distribution.")
+    destination_pressure_change: float = Field(description="The corresponding increase in pressure/density at the destination.")
+    reason: str = Field(description="Explainable string detailing why the flow was generated and bounded.")

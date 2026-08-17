@@ -64,6 +64,9 @@ LONG_ROUTE_THRESHOLD_SECONDS: float = 600.0  # 10 minutes
 #: Sentinel total_cost for unavailable routes (finite, JSON-safe)
 UNAVAILABLE_ROUTE_COST: float = 1_000_000.0
 
+#: Effective capacity factor for RESTRICTED connections
+RESTRICTED_CAPACITY_FACTOR: float = 0.5
+
 
 # ---------------------------------------------------------------------------
 # Enumerations
@@ -169,6 +172,7 @@ class VenueEdge(BaseModel):
         default=0.0, ge=0.0, le=100.0, description="Predicted risk 0–100."
     )
     available: bool = Field(default=True, description="False when corridor is physically blocked.")
+    status: str = Field(default="OPEN", description="Connection status: OPEN, CLOSED, or RESTRICTED.")
     bidirectional: bool = Field(
         default=True,
         description="When True, add_edge() will also insert the reverse direction.",
@@ -177,6 +181,16 @@ class VenueEdge(BaseModel):
         default=None,
         description="Optional directional hint for display/enforcement (e.g. 'NORTH').",
     )
+
+    @property
+    def effective_capacity(self) -> int:
+        """Calculate effective capacity based on status."""
+        if self.status == "CLOSED" or not self.available:
+            return 0
+        if self.status == "RESTRICTED":
+            return int(self.capacity * RESTRICTED_CAPACITY_FACTOR)
+        return self.capacity
+
 
 
 # ---------------------------------------------------------------------------

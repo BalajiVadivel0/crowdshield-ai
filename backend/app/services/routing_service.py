@@ -82,7 +82,8 @@ class RoutingService:
                 current_crowd=0,
                 risk_score=0.0, # Corridors inherit max risk of zones in Engine
                 predicted_risk_score=0.0,
-                available=True,
+                available=(conn.status.value != "CLOSED"),
+                status=conn.status.value,
                 bidirectional=conn.is_bidirectional
             )
             try:

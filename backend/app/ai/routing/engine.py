@@ -329,8 +329,8 @@ class SafeRoutingEngine:
         pred_cost = (combined_pred / 100.0) * 100.0 * weights.weight_predicted_risk
 
         # 4. Congestion
-        if edge.capacity > 0:
-            congestion_ratio = min(1.0, edge.current_crowd / edge.capacity)
+        if edge.effective_capacity > 0:
+            congestion_ratio = min(1.0, edge.current_crowd / edge.effective_capacity)
         else:
             congestion_ratio = 1.0  # zero-capacity corridor = fully congested
         cong_cost = congestion_ratio * 100.0 * weights.weight_congestion
@@ -475,8 +475,8 @@ class SafeRoutingEngine:
             src, dst = path[i], path[i + 1]
             for edge in graph.get_edges_from(src):
                 if edge.dest_id == dst:
-                    if edge.capacity > 0:
-                        ratio = edge.current_crowd / edge.capacity
+                    if edge.effective_capacity > 0:
+                        ratio = edge.current_crowd / edge.effective_capacity
                         if ratio >= HIGH_CONGESTION_THRESHOLD:
                             warnings.append(
                                 f"Corridor '{src}' → '{dst}' is congested "
