@@ -56,6 +56,11 @@ class ZoneSummary(BaseModel):
     # Priority rank (lower number = higher urgency)
     urgency_score: float = Field(description="Internal score used for ranking priority.")
 
+    # Incident Intelligence Signals
+    active_incidents: int = 0
+    incident_types: List[str] = Field(default_factory=list)
+    highest_incident_severity: Optional[str] = None
+
 
 class EventCrowdIntelligence(BaseModel):
     """

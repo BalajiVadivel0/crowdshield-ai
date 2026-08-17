@@ -1,5 +1,8 @@
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
+from jose import jwt, JWTError
 from app.services.websocket_manager import manager
+from app.core.config import settings
+from app.models.user import UserRole
 import logging
 
 logger = logging.getLogger(__name__)
@@ -10,17 +13,32 @@ router = APIRouter()
 async def websocket_endpoint(
     websocket: WebSocket, 
     client_id: str, 
-    role: str = Query("CITIZEN", description="AUTHORITY or CITIZEN"),
+    token: str = Query(..., description="JWT token for authentication"),
     zone_id: int = Query(None, description="Optional zone ID for targeted citizen alerts")
 ):
+    # Authenticate and extract role from token
+    try:
+        payload = jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
+        role_str = payload.get("role")
+        user_id = payload.get("sub")
+        if role_str is None or user_id is None:
+            await websocket.close(code=1008, reason="Invalid token payload")
+            return
+    except JWTError:
+        await websocket.close(code=1008, reason="Invalid token")
+        return
+        
+    role = role_str.upper()
+    if role not in [UserRole.CITIZEN.value, UserRole.AUTHORITY.value, UserRole.ADMIN.value]:
+        await websocket.close(code=1008, reason="Invalid role")
+        return
+        
     await manager.connect(websocket, client_id, role, zone_id)
     try:
         while True:
             # We don't necessarily expect incoming messages, but we need to keep the connection open
             # and handle pings or client-side disconnects.
             data = await websocket.receive_text()
-            # Can add ping/pong logic or simple echo here if needed for testing
-            # await websocket.send_text(f"Message text was: {data}")
     except WebSocketDisconnect:
         manager.disconnect(client_id)
     except Exception as e:

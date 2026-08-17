@@ -8,7 +8,7 @@ from app.models.incident import IncidentSeverity, IncidentStatus, IncidentType
 
 class IncidentReportCreate(BaseModel):
     event_id: int
-    user_id: int
+    user_id: Optional[int] = None
     zone_id: Optional[int] = None
     incident_type: IncidentType
     description: str = Field(..., min_length=5, description="Required description of the incident")

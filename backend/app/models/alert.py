@@ -1,10 +1,11 @@
 from datetime import datetime
 import enum
 
-from sqlalchemy import Column, DateTime, Enum, Integer, String, Text, ForeignKey
+from sqlalchemy import Column, DateTime, Enum, Integer, String, Text, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import relationship
 
 from app.core.database import Base
+from app.models.user import UserRole
 
 
 class AlertType(enum.Enum):
@@ -27,9 +28,9 @@ class Alert(Base):
     __tablename__ = "alerts"
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), index=True, nullable=False)
     event_id = Column(Integer, index=True, nullable=False)
     zone_id = Column(Integer, index=True, nullable=True)
+    target_role = Column(Enum(UserRole), nullable=False)
     
     alert_type = Column(Enum(AlertType), nullable=False)
     severity = Column(Enum(AlertSeverity), nullable=False)
@@ -40,6 +41,21 @@ class Alert(Base):
     
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.utcnow(), nullable=False)
     expires_at = Column(DateTime(timezone=True), nullable=False)
-    read_at = Column(DateTime(timezone=True), nullable=True)
 
+    reads = relationship("AlertRead", back_populates="alert", cascade="all, delete-orphan")
+
+
+class AlertRead(Base):
+    __tablename__ = "alert_reads"
+
+    id = Column(Integer, primary_key=True, index=True)
+    alert_id = Column(Integer, ForeignKey("alerts.id", ondelete="CASCADE"), index=True, nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False)
+    read_at = Column(DateTime(timezone=True), default=lambda: datetime.utcnow(), nullable=False)
+
+    alert = relationship("Alert", back_populates="reads")
     user = relationship("User")
+
+    __table_args__ = (
+        UniqueConstraint('alert_id', 'user_id', name='uq_alert_user_read'),
+    )

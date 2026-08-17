@@ -10,7 +10,7 @@ from typing import List
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.dependencies import get_db
+from app.api.dependencies import get_db, require_authority, get_current_user
 from app.schemas.intervention import (
     ApprovalRequest,
     CancelRequest,
@@ -25,7 +25,7 @@ from app.services.intervention_service import InterventionService
 router = APIRouter()
 
 
-@router.post("/", response_model=InterventionResponse, status_code=201)
+@router.post("/", response_model=InterventionResponse, status_code=201, dependencies=[Depends(require_authority)])
 async def create_intervention(
     data: InterventionCreate,
     db: AsyncSession = Depends(get_db)
@@ -35,7 +35,7 @@ async def create_intervention(
     return await service.create_intervention(data)
 
 
-@router.get("/", response_model=List[InterventionResponse])
+@router.get("/", response_model=List[InterventionResponse], dependencies=[Depends(get_current_user)])
 async def list_interventions(
     event_id: int = None,
     db: AsyncSession = Depends(get_db)
@@ -45,7 +45,7 @@ async def list_interventions(
     return await service.list_interventions(event_id)
 
 
-@router.get("/{intervention_id}", response_model=InterventionResponse)
+@router.get("/{intervention_id}", response_model=InterventionResponse, dependencies=[Depends(get_current_user)])
 async def get_intervention(
     intervention_id: int,
     db: AsyncSession = Depends(get_db)
@@ -58,7 +58,7 @@ async def get_intervention(
     return intervention
 
 
-@router.post("/{intervention_id}/simulate", response_model=InterventionResponse)
+@router.post("/{intervention_id}/simulate", response_model=InterventionResponse, dependencies=[Depends(require_authority)])
 async def simulate_intervention(
     intervention_id: int,
     db: AsyncSession = Depends(get_db)
@@ -73,7 +73,7 @@ async def simulate_intervention(
         raise HTTPException(status_code=409, detail=str(e))
 
 
-@router.post("/{intervention_id}/request_approval", response_model=InterventionResponse)
+@router.post("/{intervention_id}/request_approval", response_model=InterventionResponse, dependencies=[Depends(require_authority)])
 async def request_approval(
     intervention_id: int,
     db: AsyncSession = Depends(get_db)
@@ -88,7 +88,7 @@ async def request_approval(
         raise HTTPException(status_code=409, detail=str(e))
 
 
-@router.post("/{intervention_id}/approve", response_model=InterventionResponse)
+@router.post("/{intervention_id}/approve", response_model=InterventionResponse, dependencies=[Depends(require_authority)])
 async def approve_intervention(
     intervention_id: int,
     req: ApprovalRequest,
@@ -104,7 +104,7 @@ async def approve_intervention(
         raise HTTPException(status_code=409, detail=str(e))
 
 
-@router.post("/{intervention_id}/reject", response_model=InterventionResponse)
+@router.post("/{intervention_id}/reject", response_model=InterventionResponse, dependencies=[Depends(require_authority)])
 async def reject_intervention(
     intervention_id: int,
     req: RejectRequest,
@@ -120,7 +120,7 @@ async def reject_intervention(
         raise HTTPException(status_code=409, detail=str(e))
 
 
-@router.post("/{intervention_id}/activate", response_model=InterventionResponse)
+@router.post("/{intervention_id}/activate", response_model=InterventionResponse, dependencies=[Depends(require_authority)])
 async def activate_intervention(
     intervention_id: int,
     db: AsyncSession = Depends(get_db)
@@ -135,7 +135,7 @@ async def activate_intervention(
         raise HTTPException(status_code=409, detail=str(e))
 
 
-@router.post("/{intervention_id}/complete", response_model=InterventionResponse)
+@router.post("/{intervention_id}/complete", response_model=InterventionResponse, dependencies=[Depends(require_authority)])
 async def complete_intervention(
     intervention_id: int,
     req: CompleteRequest,
@@ -151,7 +151,7 @@ async def complete_intervention(
         raise HTTPException(status_code=409, detail=str(e))
 
 
-@router.post("/{intervention_id}/cancel", response_model=InterventionResponse)
+@router.post("/{intervention_id}/cancel", response_model=InterventionResponse, dependencies=[Depends(require_authority)])
 async def cancel_intervention(
     intervention_id: int,
     req: CancelRequest,

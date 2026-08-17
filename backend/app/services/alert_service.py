@@ -1,90 +1,98 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
 from app.models.alert import Alert, AlertSeverity, AlertType
-from app.services.location_service import LocationService
-
-
-class ActiveUser:
-    """Mock representation of a user's current reported state for evaluation."""
-    def __init__(self, user_id: int, lat: float, lon: float):
-        self.user_id = user_id
-        self.lat = lat
-        self.lon = lon
-
+from app.models.user import UserRole
+from app.schemas.crowd_intelligence import EventCrowdIntelligence, ZoneSummary
+from app.schemas.websocket_events import AlertNotificationData
 
 class AlertService:
     def __init__(self, session: AsyncSession):
         self.session = session
 
-    async def generate_targeted_alerts(
-        self,
-        event_id: int,
-        critical_zones: List[int],
-        approaching_zones: List[int],
-        route_changes: List[int],
-        active_users: List[ActiveUser]
-    ) -> List[Alert]:
+    async def process_intelligence_and_broadcast(self, intelligence: EventCrowdIntelligence):
         """
-        Evaluates active users against current danger zones and route changes,
-        generating alerts for those affected.
+        Main entrypoint from the crowd ingestion pipeline.
+        Generates alerts, persists them, and delegates broadcast.
+        """
+        # 1. Generate alerts
+        new_alerts = await self.generate_alerts_from_intelligence(intelligence)
+        
+        # 2. Delegate WebSocket broadcasting
+        if new_alerts:
+            # Import here to avoid circular imports if any
+            from app.services.realtime_event_service import RealtimeEventService
+            realtime_service = RealtimeEventService()
+            for alert in new_alerts:
+                await realtime_service.broadcast_alert(alert)
+
+    async def generate_alerts_from_intelligence(self, intelligence: EventCrowdIntelligence) -> List[Alert]:
+        """
+        Evaluates the current crowd intelligence and generates persisted alerts if thresholds are breached.
         """
         generated_alerts = []
 
-        for user in active_users:
-            current_zone = LocationService.resolve_zone(user.lat, user.lon)
+        # 1. Authority Event-Wide Alerting
+        if intelligence.overall_risk_level.value in ("CRITICAL", "HIGH"):
+            severity = AlertSeverity.CRITICAL if intelligence.overall_risk_level.value == "CRITICAL" else AlertSeverity.WARNING
+            alert = await self._issue_alert_if_not_spam(
+                event_id=intelligence.event_id,
+                zone_id=None,
+                target_role=UserRole.AUTHORITY,
+                alert_type=AlertType.CRITICAL_DANGER if severity == AlertSeverity.CRITICAL else AlertType.HIGH_RISK_WARNING,
+                severity=severity,
+                title="Event Risk Escalation",
+                message=f"Overall event risk is now {intelligence.overall_risk_level.value}. Review active interventions.",
+                cooldown_minutes=15,
+                expiry_minutes=60
+            )
+            if alert: generated_alerts.append(alert)
 
-            # 1. Target users inside critical zones
-            if current_zone in critical_zones:
+        # 2. Citizen Zone-Targeted Alerting
+        for zone in intelligence.zone_summaries:
+            if zone.current_level.value == "CRITICAL":
                 alert = await self._issue_alert_if_not_spam(
-                    user_id=user.user_id,
-                    event_id=event_id,
-                    zone_id=current_zone,
+                    event_id=intelligence.event_id,
+                    zone_id=zone.zone_id,
+                    target_role=UserRole.CITIZEN,
                     alert_type=AlertType.CRITICAL_DANGER,
                     severity=AlertSeverity.CRITICAL,
-                    title="CRITICAL DANGER",
-                    message="Evacuate the area immediately via the nearest safe exit.",
+                    title="Critical Safety Alert",
+                    message="This area is currently unsafe. Please move away immediately and follow safe routes.",
                     cooldown_minutes=5,
                     expiry_minutes=15
                 )
                 if alert: generated_alerts.append(alert)
-
-            # 2. Target users approaching dangerous zones
-            # We check if they are approaching any of the zones in `approaching_zones`
-            # and they are NOT already inside a critical zone (to prevent double alerting).
-            elif any(LocationService.is_approaching_zone(user.lat, user.lon, z) for z in approaching_zones):
-                # Identify the specific zone they are approaching for the alert
-                approached_zone = next(z for z in approaching_zones if LocationService.is_approaching_zone(user.lat, user.lon, z))
                 
+            elif zone.current_level.value == "HIGH":
                 alert = await self._issue_alert_if_not_spam(
-                    user_id=user.user_id,
-                    event_id=event_id,
-                    zone_id=approached_zone,
+                    event_id=intelligence.event_id,
+                    zone_id=zone.zone_id,
+                    target_role=UserRole.CITIZEN,
                     alert_type=AlertType.HIGH_RISK_WARNING,
                     severity=AlertSeverity.WARNING,
-                    title="DANGER AHEAD",
-                    message="You are approaching a high-risk zone. Please alter your route.",
+                    title="High Crowd Density",
+                    message="Crowd density is increasing. Exercise caution.",
                     cooldown_minutes=10,
                     expiry_minutes=30
                 )
                 if alert: generated_alerts.append(alert)
 
-            # 3. Target users affected by route redirection
-            # For this MVP, if a user's current zone is in the route_changes list, we alert them.
-            if current_zone in route_changes:
+            # Specific incident alerts
+            if zone.surge_active:
                 alert = await self._issue_alert_if_not_spam(
-                    user_id=user.user_id,
-                    event_id=event_id,
-                    zone_id=current_zone,
-                    alert_type=AlertType.ROUTE_REDIRECTION,
-                    severity=AlertSeverity.INFO,
-                    title="ROUTE REDIRECTION",
-                    message="Safety personnel have redirected routes in your area. Follow the digital signs.",
-                    cooldown_minutes=30,
-                    expiry_minutes=60
+                    event_id=intelligence.event_id,
+                    zone_id=zone.zone_id,
+                    target_role=UserRole.CITIZEN,
+                    alert_type=AlertType.HIGH_RISK_WARNING,
+                    severity=AlertSeverity.WARNING,
+                    title="Crowd Surge Detected",
+                    message="Sudden crowd movement detected. Avoid the surge direction.",
+                    cooldown_minutes=15,
+                    expiry_minutes=30
                 )
                 if alert: generated_alerts.append(alert)
 
@@ -92,9 +100,9 @@ class AlertService:
 
     async def _issue_alert_if_not_spam(
         self,
-        user_id: int,
         event_id: int,
-        zone_id: int,
+        zone_id: Optional[int],
+        target_role: UserRole,
         alert_type: AlertType,
         severity: AlertSeverity,
         title: str,
@@ -103,20 +111,25 @@ class AlertService:
         expiry_minutes: int
     ) -> Optional[Alert]:
         """
-        Anti-spam logic: Does not create an alert if an identical one was issued
-        recently (within cooldown) and hasn't expired.
+        Anti-spam deduplication:
+        Checks if an identical alert type for the same event/zone/role was issued within the cooldown window.
         """
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         cooldown_threshold = now - timedelta(minutes=cooldown_minutes)
 
         query = select(Alert).where(
-            Alert.user_id == user_id,
-            Alert.zone_id == zone_id,
+            Alert.event_id == event_id,
+            Alert.target_role == target_role,
             Alert.alert_type == alert_type,
             Alert.created_at >= cooldown_threshold,
             Alert.expires_at > now
         )
-        
+
+        if zone_id is not None:
+            query = query.where(Alert.zone_id == zone_id)
+        else:
+            query = query.where(Alert.zone_id.is_(None))
+
         result = await self.session.execute(query)
         existing_alert = result.scalars().first()
 
@@ -125,9 +138,9 @@ class AlertService:
 
         # Issue new alert
         new_alert = Alert(
-            user_id=user_id,
             event_id=event_id,
             zone_id=zone_id,
+            target_role=target_role,
             alert_type=alert_type,
             severity=severity,
             title=title,

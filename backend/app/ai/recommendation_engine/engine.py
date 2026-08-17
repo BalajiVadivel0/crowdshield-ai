@@ -205,6 +205,7 @@ class RecommendationEngine:
             or zone.bottleneck_active
             or zone.current_level in (RiskLevel.HIGH, RiskLevel.CRITICAL)
             or zone.current_risk_type == RiskType.HIGH_DENSITY
+            or zone.active_incidents > 0
         )
 
     # ------------------------------------------------------------------
@@ -785,9 +786,11 @@ class RecommendationEngine:
             if zone.confidence >= CONFIDENCE_HIGH_PREDICTION_THRESHOLD
             else 0.0
         )
+        
+        incident_boost = 0.10 if zone.active_incidents > 0 else 0.0
 
         floor = float(CONFIDENCE_FLOOR.get(priority.value, 0.10))
-        raw = base + trend_boost + ttc_boost + pred_boost
+        raw = base + trend_boost + ttc_boost + pred_boost + incident_boost
         return round(max(floor, min(1.0, raw)), 3)
 
     # ------------------------------------------------------------------
@@ -836,6 +839,13 @@ class RecommendationEngine:
                 threshold=CONFIDENCE_IMMINENT_THRESHOLD_MINUTES,
                 explanation=f"CRITICAL risk threshold estimated in ~{zone.time_to_critical:.0f} minutes.",
             ))
+        if zone.active_incidents > 0:
+            conds.append(TriggeringCondition(
+                signal="active_incidents",
+                observed_value=zone.active_incidents,
+                threshold=None,
+                explanation=f"There are {zone.active_incidents} active incidents reported in this zone, including: {', '.join(zone.incident_types)}.",
+            ))
         return conds
 
     @staticmethod
@@ -865,6 +875,14 @@ class RecommendationEngine:
                 explanation=f"Risk level is {zone.current_level.value}.",
             ),
         ]
+        if zone.active_incidents > 0 and ("CROWD_CONGESTION" in zone.incident_types or "CROWD_PANIC" in zone.incident_types):
+            conds.append(TriggeringCondition(
+                signal="incident_type",
+                observed_value="CROWD_PANIC/CONGESTION",
+                threshold=None,
+                explanation=f"Citizen reports confirm crowding/panic issues in the zone.",
+            ))
+        return conds
 
     @staticmethod
     def _build_reverse_flow_conditions(
@@ -894,6 +912,14 @@ class RecommendationEngine:
                             "to crowd stream collision.",
             ),
         ]
+        if zone.active_incidents > 0 and "BLOCKED_ROUTE" in zone.incident_types:
+            conds.append(TriggeringCondition(
+                signal="incident_type",
+                observed_value="BLOCKED_ROUTE",
+                threshold=None,
+                explanation=f"Citizen reports indicate a blocked route contributing to reverse flow.",
+            ))
+        return conds
 
     @staticmethod
     def _build_bottleneck_conditions(
@@ -921,6 +947,14 @@ class RecommendationEngine:
                 explanation=f"Speed ({zone.average_speed:.2f} m/s) indicates near-stationary flow.",
             ),
         ]
+        if zone.active_incidents > 0 and "BLOCKED_ROUTE" in zone.incident_types:
+            conds.append(TriggeringCondition(
+                signal="incident_type",
+                observed_value="BLOCKED_ROUTE",
+                threshold=None,
+                explanation=f"A reported blocked route is contributing to this bottleneck.",
+            ))
+        return conds
 
     @staticmethod
     def _build_high_density_conditions(
@@ -947,6 +981,13 @@ class RecommendationEngine:
                 observed_value=zone.trend.value,
                 threshold=None,
                 explanation="Risk trend is WORSENING — density is increasing.",
+            ))
+        if zone.active_incidents > 0 and "CROWD_CONGESTION" in zone.incident_types:
+            conds.append(TriggeringCondition(
+                signal="incident_type",
+                observed_value="CROWD_CONGESTION",
+                threshold=None,
+                explanation=f"Citizen reports confirm severe crowd congestion.",
             ))
         return conds
 
