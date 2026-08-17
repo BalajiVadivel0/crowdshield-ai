@@ -63,18 +63,18 @@ async def test_full_lifecycle(intervention_service, base_intervention_data):
         expected_effect="Risk drops to 40",
         decision_reason="Looks good"
     )
-    intervention = await intervention_service.approve_intervention(intervention.id, app_req)
+    intervention = await intervention_service.approve_intervention(intervention.id, app_req, actor_user_id=42)
     assert intervention.status == InterventionStatus.APPROVED
     assert intervention.result is not None
     assert intervention.result.approved_by_user_id == 42
     
     # 5. APPROVED -> ACTIVATED
-    intervention = await intervention_service.activate_intervention(intervention.id)
+    intervention = await intervention_service.activate_intervention(intervention.id, actor_user_id=42)
     assert intervention.status == InterventionStatus.ACTIVATED
     
     # 6. ACTIVATED -> COMPLETED
     comp_req = CompleteRequest(after_risk_score=40.0)
-    intervention = await intervention_service.complete_intervention(intervention.id, comp_req)
+    intervention = await intervention_service.complete_intervention(intervention.id, comp_req, actor_user_id=42)
     assert intervention.status == InterventionStatus.COMPLETED
     assert intervention.after_risk_score == 40.0
     assert intervention.risk_reduction == 45.0
@@ -86,7 +86,7 @@ async def test_reject_intervention(intervention_service, base_intervention_data)
     intervention = await intervention_service.set_pending_approval(intervention.id)
     
     rej_req = RejectRequest(user_id=99, decision_reason="Not safe enough")
-    intervention = await intervention_service.reject_intervention(intervention.id, rej_req)
+    intervention = await intervention_service.reject_intervention(intervention.id, rej_req, actor_user_id=99)
     
     assert intervention.status == InterventionStatus.REJECTED
     assert intervention.result.approved_by_user_id == 99
@@ -98,7 +98,7 @@ async def test_cancel_intervention(intervention_service, base_intervention_data)
     intervention = await intervention_service.create_intervention(base_intervention_data)
     
     cancel_req = CancelRequest(user_id=101, decision_reason="False alarm")
-    intervention = await intervention_service.cancel_intervention(intervention.id, cancel_req)
+    intervention = await intervention_service.cancel_intervention(intervention.id, cancel_req, actor_user_id=101)
     
     assert intervention.status == InterventionStatus.CANCELLED
     assert intervention.result.approved_by_user_id == 101
@@ -115,7 +115,7 @@ async def test_invalid_transition_to_approve(intervention_service, base_interven
         decision_reason="Skip steps"
     )
     with pytest.raises(ValueError, match="Cannot approve intervention in status"):
-        await intervention_service.approve_intervention(intervention.id, app_req)
+        await intervention_service.approve_intervention(intervention.id, app_req, actor_user_id=1)
 
 
 @pytest.mark.asyncio
@@ -124,7 +124,7 @@ async def test_invalid_transition_to_activate(intervention_service, base_interve
     intervention = await intervention_service.create_intervention(base_intervention_data)
     
     with pytest.raises(ValueError, match="Cannot activate intervention in status"):
-        await intervention_service.activate_intervention(intervention.id)
+        await intervention_service.activate_intervention(intervention.id, actor_user_id=1)
 
 
 @pytest.mark.asyncio
@@ -133,10 +133,10 @@ async def test_invalid_cancellation_from_terminal(intervention_service, base_int
     intervention = await intervention_service.create_intervention(base_intervention_data)
     await intervention_service.set_pending_approval(intervention.id)
     app_req = ApprovalRequest(user_id=42, decision_reason="ok")
-    await intervention_service.approve_intervention(intervention.id, app_req)
-    await intervention_service.activate_intervention(intervention.id)
-    await intervention_service.complete_intervention(intervention.id, CompleteRequest())
+    await intervention_service.approve_intervention(intervention.id, app_req, actor_user_id=42)
+    await intervention_service.activate_intervention(intervention.id, actor_user_id=42)
+    await intervention_service.complete_intervention(intervention.id, CompleteRequest(), actor_user_id=42)
     
     cancel_req = CancelRequest(user_id=101, decision_reason="Try to cancel after complete")
     with pytest.raises(ValueError, match="terminal status"):
-        await intervention_service.cancel_intervention(intervention.id, cancel_req)
+        await intervention_service.cancel_intervention(intervention.id, cancel_req, actor_user_id=101)

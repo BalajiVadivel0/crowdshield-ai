@@ -154,7 +154,7 @@ class RecommendationService:
             expected_effect=rec.expected_effect,
             decision_reason="Approved from AI Recommendation"
         )
-        approved_intervention = await self.intervention_service.approve_intervention(intervention.id, approval_req)
+        approved_intervention = await self.intervention_service.approve_intervention(intervention.id, approval_req, actor_user_id=user_id)
 
         # 2. Mark Recommendation as APPROVED
         rec.status = RecommendationStatus.APPROVED

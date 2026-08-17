@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
 
-from app.models.intervention import Intervention, InterventionAction, InterventionResult, InterventionStatus
+from app.models.intervention import Intervention, InterventionAction, InterventionResult, InterventionStatus, InterventionAudit
 from app.schemas.intervention import ApprovalRequest, CancelRequest, CompleteRequest, InterventionCreate, RejectRequest
 
 
@@ -99,7 +99,7 @@ class InterventionService:
         await self.session.commit()
         return intervention
 
-    async def approve_intervention(self, intervention_id: int, req: ApprovalRequest) -> Intervention:
+    async def approve_intervention(self, intervention_id: int, req: ApprovalRequest, actor_user_id: int) -> Intervention:
         """
         Transition from PENDING_APPROVAL to APPROVED.
         Requires recording an audit trail in InterventionResult.
@@ -111,21 +111,31 @@ class InterventionService:
         if intervention.status != InterventionStatus.PENDING_APPROVAL:
             raise ValueError(f"Cannot approve intervention in status: {intervention.status.value}")
 
+        previous_status = intervention.status
         intervention.status = InterventionStatus.APPROVED
         
         # Create result audit
         result = InterventionResult(
-            approved_by_user_id=req.user_id,
+            approved_by_user_id=actor_user_id,
             simulation_scenario_used=req.scenario,
             expected_effect=req.expected_effect,
             decision_reason=req.decision_reason
         )
         intervention.result = result
         
+        audit = InterventionAudit(
+            intervention_id=intervention.id,
+            action="APPROVE",
+            actor_user_id=actor_user_id,
+            previous_status=previous_status,
+            new_status=intervention.status
+        )
+        self.session.add(audit)
+        
         await self.session.commit()
         return intervention
 
-    async def reject_intervention(self, intervention_id: int, req: RejectRequest) -> Intervention:
+    async def reject_intervention(self, intervention_id: int, req: RejectRequest, actor_user_id: int) -> Intervention:
         """
         Transition from PENDING_APPROVAL to REJECTED.
         """
@@ -136,19 +146,29 @@ class InterventionService:
         if intervention.status != InterventionStatus.PENDING_APPROVAL:
             raise ValueError(f"Cannot reject intervention in status: {intervention.status.value}")
 
+        previous_status = intervention.status
         intervention.status = InterventionStatus.REJECTED
         
         # Create result audit for rejection
         result = InterventionResult(
-            approved_by_user_id=req.user_id,
+            approved_by_user_id=actor_user_id,
             decision_reason=f"REJECTED: {req.decision_reason}"
         )
         intervention.result = result
 
+        audit = InterventionAudit(
+            intervention_id=intervention.id,
+            action="REJECT",
+            actor_user_id=actor_user_id,
+            previous_status=previous_status,
+            new_status=intervention.status
+        )
+        self.session.add(audit)
+
         await self.session.commit()
         return intervention
 
-    async def activate_intervention(self, intervention_id: int) -> Intervention:
+    async def activate_intervention(self, intervention_id: int, actor_user_id: int) -> Intervention:
         """Transition from APPROVED to ACTIVATED."""
         intervention = await self.get_intervention(intervention_id)
         if not intervention:
@@ -157,11 +177,22 @@ class InterventionService:
         if intervention.status != InterventionStatus.APPROVED:
             raise ValueError(f"Cannot activate intervention in status: {intervention.status.value}")
 
+        previous_status = intervention.status
         intervention.status = InterventionStatus.ACTIVATED
+        
+        audit = InterventionAudit(
+            intervention_id=intervention.id,
+            action="ACTIVATE",
+            actor_user_id=actor_user_id,
+            previous_status=previous_status,
+            new_status=intervention.status
+        )
+        self.session.add(audit)
+        
         await self.session.commit()
         return intervention
 
-    async def complete_intervention(self, intervention_id: int, req: CompleteRequest) -> Intervention:
+    async def complete_intervention(self, intervention_id: int, req: CompleteRequest, actor_user_id: int) -> Intervention:
         """Transition from ACTIVATED to COMPLETED, storing final risk outcome."""
         intervention = await self.get_intervention(intervention_id)
         if not intervention:
@@ -170,16 +201,26 @@ class InterventionService:
         if intervention.status != InterventionStatus.ACTIVATED:
             raise ValueError(f"Cannot complete intervention in status: {intervention.status.value}")
 
+        previous_status = intervention.status
         intervention.status = InterventionStatus.COMPLETED
         
         if req.after_risk_score is not None:
             intervention.after_risk_score = req.after_risk_score
             intervention.risk_reduction = intervention.before_risk_score - req.after_risk_score
 
+        audit = InterventionAudit(
+            intervention_id=intervention.id,
+            action="COMPLETE",
+            actor_user_id=actor_user_id,
+            previous_status=previous_status,
+            new_status=intervention.status
+        )
+        self.session.add(audit)
+
         await self.session.commit()
         return intervention
 
-    async def cancel_intervention(self, intervention_id: int, req: CancelRequest) -> Intervention:
+    async def cancel_intervention(self, intervention_id: int, req: CancelRequest, actor_user_id: int) -> Intervention:
         """
         Transition to CANCELLED from any non-terminal state.
         Terminal states: COMPLETED, REJECTED, CANCELLED.
@@ -197,6 +238,7 @@ class InterventionService:
         if intervention.status in terminal_states:
             raise ValueError(f"Cannot cancel intervention already in terminal status: {intervention.status.value}")
 
+        previous_status = intervention.status
         intervention.status = InterventionStatus.CANCELLED
 
         # Record cancellation reason if a result record doesn't exist,
@@ -205,10 +247,19 @@ class InterventionService:
             intervention.result.decision_reason += f"\nCANCELLED: {req.decision_reason}"
         else:
             result = InterventionResult(
-                approved_by_user_id=req.user_id,
+                approved_by_user_id=actor_user_id,
                 decision_reason=f"CANCELLED: {req.decision_reason}"
             )
             intervention.result = result
+
+        audit = InterventionAudit(
+            intervention_id=intervention.id,
+            action="CANCEL",
+            actor_user_id=actor_user_id,
+            previous_status=previous_status,
+            new_status=intervention.status
+        )
+        self.session.add(audit)
 
         await self.session.commit()
         return intervention

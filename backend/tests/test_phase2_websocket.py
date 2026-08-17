@@ -7,10 +7,10 @@ from fastapi.testclient import TestClient
 from app.main import app
 from app.services.websocket_manager import manager
 from app.core.security import create_access_token
-from app.models.user import UserRole
+from app.models.user import User, UserRole
 
 @pytest.mark.asyncio
-async def test_full_phase2_websocket_pipeline(app):
+async def test_full_phase2_websocket_pipeline(app, db_session):
     """
     Integration test proving end-to-end WebSocket broadcasts via FastAPI TestClient.
     Note: We must use sync TestClient.websocket_connect because Starlette/FastAPI
@@ -50,16 +50,22 @@ async def test_full_phase2_websocket_pipeline(app):
     res_zone5 = client.post("/api/v1/zones/", json=zone5_data)
     zone5_id = res_zone5.json()["id"]
 
-    # 3. Connect WebSockets
-    # We use TestClient.websocket_connect context managers
+    # 3. Create Users and Connect WebSockets
     
-    auth_token = create_access_token(data={"sub": "1", "role": UserRole.AUTHORITY.value})
-    cit3_token = create_access_token(data={"sub": "2", "role": UserRole.CITIZEN.value})
-    cit5_token = create_access_token(data={"sub": "3", "role": UserRole.CITIZEN.value})
+    auth_user = User(email="auth@example.com", hashed_password="pw", role=UserRole.AUTHORITY)
+    cit3_user = User(email="cit3@example.com", hashed_password="pw", role=UserRole.CITIZEN, assigned_zone_id=zone3_id)
+    cit5_user = User(email="cit5@example.com", hashed_password="pw", role=UserRole.CITIZEN, assigned_zone_id=zone5_id)
+    
+    db_session.add_all([auth_user, cit3_user, cit5_user])
+    await db_session.commit()
+    
+    auth_token = create_access_token(data={"sub": str(auth_user.id), "role": UserRole.AUTHORITY.value})
+    cit3_token = create_access_token(data={"sub": str(cit3_user.id), "role": UserRole.CITIZEN.value})
+    cit5_token = create_access_token(data={"sub": str(cit5_user.id), "role": UserRole.CITIZEN.value})
     
     with client.websocket_connect(f"/api/v1/ws/auth-client?token={auth_token}") as auth_ws, \
-         client.websocket_connect(f"/api/v1/ws/cit-zone3?token={cit3_token}&zone_id={zone3_id}") as cit3_ws, \
-         client.websocket_connect(f"/api/v1/ws/cit-zone5?token={cit5_token}&zone_id={zone5_id}") as cit5_ws:
+         client.websocket_connect(f"/api/v1/ws/cit-zone3?token={cit3_token}") as cit3_ws, \
+         client.websocket_connect(f"/api/v1/ws/cit-zone5?token={cit5_token}") as cit5_ws:
              
         # 4. Ingest Crowd Reading (High Risk to Zone 3)
         reading_data = {

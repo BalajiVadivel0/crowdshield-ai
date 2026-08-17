@@ -1,6 +1,6 @@
 import enum
 from datetime import datetime, timezone
-from sqlalchemy import Column, Integer, String, Boolean, Enum, DateTime
+from sqlalchemy import Column, Integer, String, Boolean, Enum, DateTime, ForeignKey
 from app.core.database import Base
 
 class UserRole(str, enum.Enum):
@@ -16,6 +16,7 @@ class User(Base):
     hashed_password = Column(String, nullable=False)
     role = Column(Enum(UserRole), default=UserRole.CITIZEN, nullable=False)
     is_active = Column(Boolean, default=True)
+    assigned_zone_id = Column(Integer, ForeignKey("zones.id"), nullable=True)
     
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
     updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)

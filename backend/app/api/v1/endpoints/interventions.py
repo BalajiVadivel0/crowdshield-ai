@@ -92,12 +92,13 @@ async def request_approval(
 async def approve_intervention(
     intervention_id: int,
     req: ApprovalRequest,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_user)
 ):
     """Authority approval. Transitions to APPROVED."""
     service = InterventionService(db)
     try:
-        return await service.approve_intervention(intervention_id, req)
+        return await service.approve_intervention(intervention_id, req, actor_user_id=current_user.id)
     except ValueError as e:
         if "not found" in str(e):
             raise HTTPException(status_code=404, detail=str(e))
@@ -108,12 +109,13 @@ async def approve_intervention(
 async def reject_intervention(
     intervention_id: int,
     req: RejectRequest,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_user)
 ):
     """Authority rejection. Transitions to REJECTED."""
     service = InterventionService(db)
     try:
-        return await service.reject_intervention(intervention_id, req)
+        return await service.reject_intervention(intervention_id, req, actor_user_id=current_user.id)
     except ValueError as e:
         if "not found" in str(e):
             raise HTTPException(status_code=404, detail=str(e))
@@ -123,12 +125,13 @@ async def reject_intervention(
 @router.post("/{intervention_id}/activate", response_model=InterventionResponse, dependencies=[Depends(require_authority)])
 async def activate_intervention(
     intervention_id: int,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_user)
 ):
     """Activates an approved intervention. Transitions to ACTIVATED."""
     service = InterventionService(db)
     try:
-        return await service.activate_intervention(intervention_id)
+        return await service.activate_intervention(intervention_id, actor_user_id=current_user.id)
     except ValueError as e:
         if "not found" in str(e):
             raise HTTPException(status_code=404, detail=str(e))
@@ -139,12 +142,13 @@ async def activate_intervention(
 async def complete_intervention(
     intervention_id: int,
     req: CompleteRequest,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_user)
 ):
     """Completes an active intervention. Transitions to COMPLETED."""
     service = InterventionService(db)
     try:
-        return await service.complete_intervention(intervention_id, req)
+        return await service.complete_intervention(intervention_id, req, actor_user_id=current_user.id)
     except ValueError as e:
         if "not found" in str(e):
             raise HTTPException(status_code=404, detail=str(e))
@@ -155,12 +159,13 @@ async def complete_intervention(
 async def cancel_intervention(
     intervention_id: int,
     req: CancelRequest,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_user)
 ):
     """Cancels an intervention. Transitions to CANCELLED."""
     service = InterventionService(db)
     try:
-        return await service.cancel_intervention(intervention_id, req)
+        return await service.cancel_intervention(intervention_id, req, actor_user_id=current_user.id)
     except ValueError as e:
         if "not found" in str(e):
             raise HTTPException(status_code=404, detail=str(e))
