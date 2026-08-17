@@ -236,9 +236,9 @@ def test_explainability_output(risk_engine, sim_service):
     assert "Dominant Condition: CROWD_CRUSH" in explanation
     assert "Density Risk:" in explanation
     assert "Movement Conflict Risk:" in explanation
-    assert "Active Danger Signals:" in explanation
+    assert "Active Severe Signals" in explanation
     assert "Surge" in explanation
-    assert "Reverse Flow" in explanation
+    assert "Flow Conflict" in explanation
     assert "Bottleneck" in explanation
 
     # Ensure features exist in structured form too

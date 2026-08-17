@@ -33,7 +33,10 @@ RISK_THRESHOLD_MEDIUM: float = 60.0
 #: Upper bound (inclusive) of the HIGH risk band
 RISK_THRESHOLD_HIGH: float = 80.0
 
-# Anything above RISK_THRESHOLD_HIGH is CRITICAL (up to 100)
+# Hysteresis recovery thresholds
+RISK_RECOVERY_LOW: float = 20.0
+RISK_RECOVERY_MEDIUM: float = 45.0
+RISK_RECOVERY_HIGH: float = 70.0
 
 # ---------------------------------------------------------------------------
 # Composite score weights — must sum to 1.0
@@ -210,6 +213,9 @@ class RiskAssessment(BaseModel):
     # Explainability
     features: RiskFeatures = Field(description="Per-component feature values (all 0–100).")
     explanation: str = Field(description="Human-readable summary of risk factors.")
+    active_signals_count: int = Field(default=0, description="Count of severe signals active.")
+    persistence_count: int = Field(default=0, description="Number of consecutive readings with elevated risk.")
+    persistence_duration_seconds: Optional[float] = Field(default=None, description="Duration of elevated risk in seconds.")
 
     # Context forwarded from source reading
     event_id: int

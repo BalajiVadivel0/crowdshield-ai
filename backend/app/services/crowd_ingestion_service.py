@@ -80,19 +80,20 @@ class CrowdIngestionService:
         # 2. Persist CrowdReading
         crowd_reading_response = await self._persist_crowd_reading(data)
 
-        # 3. Risk evaluation
-        risk_assessment = self._risk_engine.evaluate(crowd_reading_response)
+        # 3. Load historical risk assessments for risk evaluation and prediction
+        history = await self._load_risk_history(data.event_id, data.zone_id)
 
-        # 4. Persist RiskAssessmentRecord
+        # 4. Risk evaluation (with hysteresis & multi-signal using history)
+        risk_assessment = self._risk_engine.evaluate(crowd_reading_response, history)
+
+        # 5. Persist RiskAssessmentRecord
         await self._persist_risk_assessment(
             risk_assessment, crowd_reading_response.id, crowd_reading_response.timestamp
         )
 
-        # 5. Load historical risk assessments for prediction
-        history = await self._load_risk_history(data.event_id, data.zone_id)
-
-        # 6. Run prediction
-        prediction_result = self._prediction_engine.predict(history)
+        # 6. Run prediction (include the new assessment in the history)
+        prediction_history = [risk_assessment] + history
+        prediction_result = self._prediction_engine.predict(prediction_history)
 
         # 7. Build event-wide intelligence
         intelligence = await self._aggregate_intelligence(data.event_id)
