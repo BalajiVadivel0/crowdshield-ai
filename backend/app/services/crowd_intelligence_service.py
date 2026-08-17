@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 
 from app.schemas.crowd_reading import CrowdReadingCreate
 from app.ai.risk_engine.models import RiskAssessment, RiskLevel, RiskType
-from app.ai.prediction_engine.models import PredictionResult, TrendDirection
+from app.ai.prediction_engine.models import PredictionResult, TrendDirection, PropagationResult
 from app.schemas.crowd_intelligence import EventCrowdIntelligence, ZoneSummary, PropagationStatus
 
 
@@ -25,7 +25,8 @@ class CrowdIntelligenceService:
         readings: List[CrowdReadingCreate],
         assessments: List[RiskAssessment],
         predictions: List[PredictionResult],
-        active_incidents: List[any] = None  # Using any to avoid circular imports if IncidentReport is not imported
+        active_incidents: List[any] = None,  # Using any to avoid circular imports if IncidentReport is not imported
+        propagation_results: List[PropagationResult] = None
     ) -> EventCrowdIntelligence:
         """
         Produce a unified event-level intelligence object from current zone states.
@@ -72,6 +73,14 @@ class CrowdIntelligenceService:
 
         if active_incidents:
             flags.add("INCIDENT_REPORTED")
+
+        propagation_results = propagation_results or []
+        prop_by_zone = {}
+        for prop in propagation_results:
+            dest_id = int(prop.destination_zone_id)
+            if dest_id not in prop_by_zone:
+                prop_by_zone[dest_id] = []
+            prop_by_zone[dest_id].append(prop)
 
         for z_id in valid_zone_ids:
             r = r_map[z_id]
@@ -150,7 +159,8 @@ class CrowdIntelligenceService:
                 urgency_score=urgency,
                 active_incidents=z_active_incidents,
                 incident_types=z_incident_types,
-                highest_incident_severity=z_highest_severity
+                highest_incident_severity=z_highest_severity,
+                network_impacts=prop_by_zone.get(z_id, [])
             )
             zone_summaries.append(summary)
             

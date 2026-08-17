@@ -231,3 +231,23 @@ class VenueGraph:
             f"directed_edges={self.edge_count()}, "
             f"exits={len(self.get_exits())})"
         )
+
+    def clone(self) -> "VenueGraph":
+        """
+        Create a deep copy of the venue graph.
+        
+        Since nodes and edges are Pydantic models, we use model_copy(deep=True)
+        to ensure full isolation. Mutating the clone will not affect the original.
+        """
+        new_graph = VenueGraph()
+        
+        # Deep copy nodes
+        for node in self.nodes.values():
+            new_graph.add_node(node.model_copy(deep=True))
+            
+        # Deep copy edges (only outgoing needed as bidirectional adds both)
+        for edges in self._outgoing.values():
+            for edge in edges:
+                new_graph._outgoing[edge.source_id].append(edge.model_copy(deep=True))
+                
+        return new_graph

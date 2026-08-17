@@ -88,6 +88,67 @@ class RecommendationService:
         # Return all active recommendations
         return await self.list_active_recommendations(intelligence.event_id)
 
+    async def _build_hydrated_graph(self, event_id: int):
+        from app.models.crowd_reading import CrowdReading
+        from app.models.risk_assessment import RiskAssessmentRecord
+        from app.services.routing_service import RoutingService
+        from sqlalchemy import desc
+        
+        venue_graph = await RoutingService.build_venue_graph(self.session, event_id)
+        
+        # Get unique zones
+        result = await self.session.execute(
+            select(CrowdReading.zone_id).where(CrowdReading.event_id == event_id).distinct()
+        )
+        zone_ids = [row[0] for row in result.fetchall()]
+        
+        current_assessments = {}
+        
+        for zone_id in zone_ids:
+            r_result = await self.session.execute(
+                select(CrowdReading).where(CrowdReading.event_id == event_id, CrowdReading.zone_id == zone_id)
+                .order_by(desc(CrowdReading.timestamp)).limit(1)
+            )
+            reading = r_result.scalar_one_or_none()
+            
+            a_result = await self.session.execute(
+                select(RiskAssessmentRecord).where(
+                    RiskAssessmentRecord.event_id == event_id, RiskAssessmentRecord.zone_id == zone_id
+                ).order_by(desc(RiskAssessmentRecord.timestamp)).limit(1)
+            )
+            assessment = a_result.scalar_one_or_none()
+            
+            node_id = str(zone_id)
+            if reading and node_id in venue_graph.nodes:
+                venue_graph.nodes[node_id].current_crowd = reading.person_count
+            if assessment:
+                if node_id in venue_graph.nodes:
+                    venue_graph.nodes[node_id].risk_score = assessment.risk_score
+                # Mock a RiskAssessment-like object with .score for the NetworkPropagationEngine
+                from app.ai.risk_engine.models import RiskAssessment, RiskLevel, RiskType, RiskFeatures
+                features = RiskFeatures(
+                    density_risk=assessment.density_risk,
+                    growth_risk=assessment.growth_risk,
+                    movement_conflict_risk=assessment.movement_conflict_risk,
+                    speed_reduction_risk=assessment.speed_reduction_risk,
+                    surge_signal=assessment.surge_signal,
+                    reverse_flow_signal=assessment.reverse_flow_signal,
+                    bottleneck_signal=assessment.bottleneck_signal,
+                    congestion_signal=False
+                )
+                current_assessments[node_id] = RiskAssessment(
+                    score=assessment.risk_score,
+                    level=RiskLevel(assessment.risk_level),
+                    risk_type=RiskType(assessment.risk_type),
+                    features=features,
+                    explanation=assessment.explanation,
+                    event_id=assessment.event_id,
+                    zone_id=assessment.zone_id,
+                    source_timestamp=assessment.timestamp.isoformat()
+                )
+                
+        return venue_graph, current_assessments
+
     async def simulate_recommendation(self, recommendation_id: int):
         rec = await self.get_recommendation(recommendation_id)
         if not rec:
@@ -96,27 +157,61 @@ class RecommendationService:
         if rec.status != RecommendationStatus.GENERATED:
             raise ValueError(f"Cannot simulate recommendation in status {rec.status}")
 
-        # Simulate the 'NORMAL' scenario to show risk reduction
-        # In a real system, this would use a more sophisticated model mapping action_type to an outcome.
-        readings = self.simulation_service.generate_scenario(
-            event_id=rec.event_id,
-            zone_id=rec.zone_id or 1,
-            zone_capacity=1000, # default capacity
-            scenario=ScenarioType.NORMAL,
-            total_steps=5,
-            step_seconds=60
-        )
-        # Dummy result based on readings
-        simulated_risk = 20.0
-        risk_reduction = max(0.0, (rec.confidence * 100) - simulated_risk)
-        
         from app.schemas.recommendation import RecommendationSimulationResponse
+        from app.ai.prediction_engine.propagation import NetworkPropagationEngine
+        from app.ai.simulation.mutations import MutationBuilder, apply_mutations
+        from app.ai.simulation.ranker import SimulationRanker
+        from app.ai.recommendation_engine.models import ActionType
+
+        horizon_minutes = 15
+        venue_graph, current_assessments = await self._build_hydrated_graph(rec.event_id)
+        network_engine = NetworkPropagationEngine()
+        
+        # 1. Baseline Snapshot
+        baseline_graph = venue_graph.clone()
+        baseline_sim_state, baseline_trace = network_engine.forecast_network_risk(
+            baseline_graph, current_assessments, horizon_minutes=horizon_minutes
+        )
+        
+        # Determine baseline peak risk
+        baseline_peak_risk = 0.0
+        for ra in baseline_sim_state.values():
+            risk = ra.score
+            baseline_peak_risk = max(baseline_peak_risk, risk)
+
+        # Check if simulatable
+        try:
+            target_zone = str(rec.zone_id) if rec.zone_id else None
+            action_enum = ActionType(rec.action_type)
+            mutations = MutationBuilder.build_mutations(action_enum, target_zone, venue_graph)
+        except ValueError as e:
+            # Action is not simulatable or invalid mutation target
+            print(f"Simulation ValueError for {rec.action_type}: {e}")
+            unsupported_metrics = SimulationRanker.build_unsupported_metrics(baseline_peak_risk, horizon_minutes)
+            return RecommendationSimulationResponse(
+                recommendation_id=rec.id,
+                **unsupported_metrics.dict()
+            )
+            
+        # 2. Scenario Simulation
+        scenario_graph = venue_graph.clone()
+        apply_mutations(scenario_graph, mutations)
+        
+        scenario_state, _ = network_engine.forecast_network_risk(
+            scenario_graph, current_assessments, horizon_minutes=horizon_minutes
+        )
+        
+        # 3. Metrics and Rank
+        metrics = SimulationRanker.calculate_metrics(
+            baseline_risk=baseline_peak_risk,
+            scenario_state=scenario_state,
+            horizon_minutes=horizon_minutes,
+            affected_zones=rec.affected_zones
+        )
+        
         return RecommendationSimulationResponse(
             recommendation_id=rec.id,
-            current_risk=rec.confidence * 100,
-            simulated_risk=simulated_risk,
-            risk_reduction=risk_reduction,
-            affected_zones=rec.affected_zones
+            **metrics.dict()
         )
 
     async def approve_recommendation(self, recommendation_id: int, user_id: int):

@@ -12,7 +12,7 @@ from typing import List, Optional
 from pydantic import BaseModel, Field
 
 from app.ai.risk_engine.models import RiskLevel, RiskType
-from app.ai.prediction_engine.models import TrendDirection
+from app.ai.prediction_engine.models import TrendDirection, PropagationResult
 
 
 class PropagationStatus(str, Enum):
@@ -60,6 +60,12 @@ class ZoneSummary(BaseModel):
     active_incidents: int = 0
     incident_types: List[str] = Field(default_factory=list)
     highest_incident_severity: Optional[str] = None
+
+    # Network Propagation Intelligence
+    network_impacts: List[PropagationResult] = Field(
+        default_factory=list,
+        description="Propagation risks flowing into this zone from upstream."
+    )
 
 
 class EventCrowdIntelligence(BaseModel):
