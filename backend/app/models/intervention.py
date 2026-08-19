@@ -80,6 +80,7 @@ class Intervention(Base):
     # Relationships
     actions = relationship("InterventionAction", back_populates="intervention", cascade="all, delete-orphan")
     result = relationship("InterventionResult", back_populates="intervention", uselist=False, cascade="all, delete-orphan")
+    audit_trail = relationship("InterventionAudit", back_populates="intervention", cascade="all, delete-orphan")
 
 class InterventionAction(Base):
     """

@@ -1,5 +1,6 @@
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
 from jose import jwt, JWTError
 from app.services.websocket_manager import manager
 from app.core.config import settings
@@ -17,7 +18,6 @@ async def websocket_endpoint(
     client_id: str, 
     token: str = Query(..., description="JWT token for authentication"),
     zone_id: int = Query(None, description="Optional zone ID for targeted citizen alerts"),
-    session: AsyncSession = Depends(get_db)
     db: AsyncSession = Depends(get_db)
 ):
     # Authenticate and extract role from token
@@ -33,15 +33,13 @@ async def websocket_endpoint(
             if role_str is None or user_id_str is None:
                 await websocket.close(code=1008, reason="Invalid token payload")
                 return
-        user_id = int(user_id_str)
+            user_id = int(user_id_str)
         except (JWTError, ValueError):
             await websocket.close(code=1008, reason="Invalid token")
             return
             
         # Fetch user from DB to get server-side truth for event and zone
-        stmt = select(User).where(User.id == int(user_id))
-        result = await session.execute(stmt)
-        user = result.scalars().first()
+        user = await db.get(User, user_id)
         
         if not user or not user.is_active:
             await websocket.close(code=1008, reason="User inactive or not found")
@@ -51,15 +49,6 @@ async def websocket_endpoint(
     if role not in [UserRole.CITIZEN.value, UserRole.AUTHORITY.value, UserRole.ADMIN.value]:
         await websocket.close(code=1008, reason="Invalid role")
         return
-        
-    user = await db.get(User, user_id)
-    if not user:
-        await websocket.close(code=1008, reason="User not found")
-        return
-        
-    zone_id = None
-    if role == UserRole.CITIZEN.value:
-        zone_id = user.assigned_zone_id
         
     event_id = user.assigned_event_id
     if not event_id and role != UserRole.ADMIN.value:
@@ -72,7 +61,7 @@ async def websocket_endpoint(
     elif zone_id is not None:
         # Validate that the requested zone belongs to the user's event
         from app.models.zone import Zone
-        zone_result = await session.execute(select(Zone).where(Zone.id == zone_id))
+        zone_result = await db.execute(select(Zone).where(Zone.id == zone_id))
         zone_record = zone_result.scalar_one_or_none()
         if not zone_record or zone_record.event_id != event_id:
             await websocket.close(code=1008, reason="Unauthorized zone access: Zone does not belong to your event")

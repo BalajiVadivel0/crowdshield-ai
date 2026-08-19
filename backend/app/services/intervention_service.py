@@ -161,7 +161,7 @@ class InterventionService:
         await self.session.commit()
         return intervention
 
-    async def approve_intervention(self, intervention_id: int, req: ApprovalRequest, actor_user_id: int, current_user: User) -> Intervention:
+    async def approve_intervention(self, intervention_id: int, req: ApprovalRequest, current_user: User) -> Intervention:
         """
         Transition from PENDING_APPROVAL to APPROVED.
         Requires recording an audit trail in InterventionResult.
@@ -179,7 +179,6 @@ class InterventionService:
         
         # Create result audit
         result = InterventionResult(
-            approved_by_user_id=actor_user_id,
             approved_by_user_id=current_user.id,
             simulation_scenario_used=req.scenario,
             expected_effect=req.expected_effect,
@@ -190,7 +189,7 @@ class InterventionService:
         audit = InterventionAudit(
             intervention_id=intervention.id,
             action="APPROVE",
-            actor_user_id=actor_user_id,
+            actor_user_id=current_user.id,
             previous_status=previous_status,
             new_status=intervention.status
         )
@@ -212,7 +211,6 @@ class InterventionService:
         return intervention
 
     async def reject_intervention(self, intervention_id: int, req: RejectRequest, current_user: User) -> Intervention:
-    async def reject_intervention(self, intervention_id: int, req: RejectRequest, actor_user_id: int) -> Intervention:
         """
         Transition from PENDING_APPROVAL to REJECTED.
         """
@@ -230,7 +228,6 @@ class InterventionService:
         # Create result audit for rejection
         result = InterventionResult(
             approved_by_user_id=current_user.id,
-            approved_by_user_id=actor_user_id,
             decision_reason=f"REJECTED: {req.decision_reason}"
         )
         intervention.result = result
@@ -238,7 +235,7 @@ class InterventionService:
         audit = InterventionAudit(
             intervention_id=intervention.id,
             action="REJECT",
-            actor_user_id=actor_user_id,
+            actor_user_id=current_user.id,
             previous_status=previous_status,
             new_status=intervention.status
         )
@@ -256,7 +253,6 @@ class InterventionService:
         return intervention
 
     async def activate_intervention(self, intervention_id: int, current_user: User) -> Intervention:
-    async def activate_intervention(self, intervention_id: int, actor_user_id: int) -> Intervention:
         """Transition from APPROVED to ACTIVATED."""
         intervention = await self.get_intervention(intervention_id)
         if not intervention:
@@ -281,7 +277,7 @@ class InterventionService:
         audit = InterventionAudit(
             intervention_id=intervention.id,
             action="ACTIVATE",
-            actor_user_id=actor_user_id,
+            actor_user_id=current_user.id,
             previous_status=previous_status,
             new_status=intervention.status
         )
@@ -291,7 +287,6 @@ class InterventionService:
         return intervention
 
     async def complete_intervention(self, intervention_id: int, req: CompleteRequest, current_user: User) -> Intervention:
-    async def complete_intervention(self, intervention_id: int, req: CompleteRequest, actor_user_id: int) -> Intervention:
         """Transition from ACTIVATED to COMPLETED, storing final risk outcome."""
         intervention = await self.get_intervention(intervention_id)
         if not intervention:
@@ -322,7 +317,7 @@ class InterventionService:
         audit = InterventionAudit(
             intervention_id=intervention.id,
             action="COMPLETE",
-            actor_user_id=actor_user_id,
+            actor_user_id=current_user.id,
             previous_status=previous_status,
             new_status=intervention.status
         )
@@ -332,7 +327,6 @@ class InterventionService:
         return intervention
 
     async def cancel_intervention(self, intervention_id: int, req: CancelRequest, current_user: User) -> Intervention:
-    async def cancel_intervention(self, intervention_id: int, req: CancelRequest, actor_user_id: int) -> Intervention:
         """
         Transition to CANCELLED from any non-terminal state.
         Terminal states: COMPLETED, REJECTED, CANCELLED.
@@ -361,7 +355,6 @@ class InterventionService:
         else:
             result = InterventionResult(
                 approved_by_user_id=current_user.id,
-                approved_by_user_id=actor_user_id,
                 decision_reason=f"CANCELLED: {req.decision_reason}"
             )
             intervention.result = result
@@ -377,7 +370,7 @@ class InterventionService:
         audit = InterventionAudit(
             intervention_id=intervention.id,
             action="CANCEL",
-            actor_user_id=actor_user_id,
+            actor_user_id=current_user.id,
             previous_status=previous_status,
             new_status=intervention.status
         )
