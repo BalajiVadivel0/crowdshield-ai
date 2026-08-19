@@ -5,12 +5,12 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.core.security import create_access_token
-from app.models.user import UserRole
+from app.models.user import User, UserRole
 from app.models.incident import IncidentStatus, IncidentSeverity, IncidentType
 from app.schemas.incident import IncidentReportCreate
 
 @pytest.mark.asyncio
-async def test_phase5h_intelligence_integration(app):
+async def test_phase5h_intelligence_integration(app, db_session):
     """
     Test that active incidents properly surface in the CrowdIntelligence snapshot
     without modifying the underlying RiskEngine math.
@@ -38,8 +38,13 @@ async def test_phase5h_intelligence_integration(app):
     zone_id = res_zone.json()["id"]
 
     # 3. Create Users
-    cit_token = create_access_token(data={"sub": "2", "role": UserRole.CITIZEN.value})
-    auth_token = create_access_token(data={"sub": "1", "role": UserRole.AUTHORITY.value})
+    cit_user = User(email="cit1@ex.com", hashed_password="pw", role=UserRole.CITIZEN, assigned_zone_id=zone_id)
+    auth_user = User(email="auth1@ex.com", hashed_password="pw", role=UserRole.AUTHORITY)
+    db_session.add_all([cit_user, auth_user])
+    await db_session.commit()
+    
+    cit_token = create_access_token(data={"sub": str(cit_user.id), "role": UserRole.CITIZEN.value})
+    auth_token = create_access_token(data={"sub": str(auth_user.id), "role": UserRole.AUTHORITY.value})
     headers_cit = {"Authorization": f"Bearer {cit_token}"}
     headers_auth = {"Authorization": f"Bearer {auth_token}"}
 
@@ -66,7 +71,7 @@ async def test_phase5h_intelligence_integration(app):
         # 6. Report an active incident
         inc_data = {
             "event_id": event_id,
-            "user_id": 2,
+            "user_id": cit_user.id,
             "zone_id": zone_id,
             "incident_type": "BLOCKED_ROUTE",
             "description": "The exit is totally blocked.",

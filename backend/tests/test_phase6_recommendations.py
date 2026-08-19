@@ -105,7 +105,8 @@ async def test_recommendation_generation_and_simulation_and_approval(
     )
     assert sim_response.status_code == 200
     sim_data = sim_response.json()
-    assert "simulated_risk" in sim_data
+    assert "scenario_peak_network_risk" in sim_data
+    assert "risk_reduction_delta" in sim_data
     
     # 4. Approve it
     approve_response = client.post(

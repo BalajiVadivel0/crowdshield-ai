@@ -137,6 +137,7 @@ async def approve_intervention(
     intervention_id: int,
     req: ApprovalRequest,
     db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_user),
     current_user = Depends(get_current_user)
 ):
     """Authority approval. Transitions to APPROVED."""
@@ -147,7 +148,7 @@ async def approve_intervention(
     verify_event_access(intervention.event_id, current_user)
     
     try:
-        return await service.approve_intervention(intervention_id, req, current_user)
+        return await service.approve_intervention(intervention_id, req, current_user, actor_user_id=current_user.id)
     except ValueError as e:
         raise HTTPException(status_code=409, detail=str(e))
 
@@ -157,6 +158,7 @@ async def reject_intervention(
     intervention_id: int,
     req: RejectRequest,
     db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_user),
     current_user = Depends(get_current_user)
 ):
     """Authority rejection. Transitions to REJECTED."""
@@ -167,7 +169,7 @@ async def reject_intervention(
     verify_event_access(intervention.event_id, current_user)
     
     try:
-        return await service.reject_intervention(intervention_id, req, current_user)
+        return await service.reject_intervention(intervention_id, req, current_user, actor_user_id=current_user.id)
     except ValueError as e:
         raise HTTPException(status_code=409, detail=str(e))
 
@@ -176,6 +178,7 @@ async def reject_intervention(
 async def activate_intervention(
     intervention_id: int,
     db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_user),
     current_user = Depends(get_current_user)
 ):
     """Activates an approved intervention. Transitions to ACTIVATED."""
@@ -186,7 +189,7 @@ async def activate_intervention(
     verify_event_access(intervention.event_id, current_user)
     
     try:
-        return await service.activate_intervention(intervention_id, current_user)
+        return await service.activate_intervention(intervention_id, current_user, actor_user_id=current_user.id)
     except ValueError as e:
         raise HTTPException(status_code=409, detail=str(e))
 
@@ -206,7 +209,7 @@ async def complete_intervention(
     verify_event_access(intervention.event_id, current_user)
     
     try:
-        return await service.complete_intervention(intervention_id, req, current_user)
+        return await service.complete_intervention(intervention_id, req, current_user, actor_user_id=current_user.id)
     except ValueError as e:
         raise HTTPException(status_code=409, detail=str(e))
 
@@ -216,6 +219,7 @@ async def cancel_intervention(
     intervention_id: int,
     req: CancelRequest,
     db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_user),
     current_user = Depends(get_current_user)
 ):
     """Cancels an intervention. Transitions to CANCELLED."""
@@ -226,6 +230,6 @@ async def cancel_intervention(
     verify_event_access(intervention.event_id, current_user)
     
     try:
-        return await service.cancel_intervention(intervention_id, req, current_user)
+        return await service.cancel_intervention(intervention_id, req, current_user, actor_user_id=current_user.id)
     except ValueError as e:
         raise HTTPException(status_code=409, detail=str(e))

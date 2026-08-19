@@ -16,10 +16,17 @@ class RecommendationResponse(Recommendation):
 
 class RecommendationSimulationResponse(BaseModel):
     recommendation_id: int
-    current_risk: float
-    simulated_risk: float
-    risk_reduction: float
-    affected_zones: List[int]
+    simulated: bool
+    baseline_peak_network_risk: Optional[float] = None
+    scenario_peak_network_risk: Optional[float] = None
+    risk_reduction_delta: Optional[float] = None
+    risk_reduction_percentage: Optional[float] = None
+    critical_zone_count: Optional[int] = None
+    high_risk_zone_count: Optional[int] = None
+    scenario_score: Optional[float] = None
+    simulation_horizon_minutes: Optional[int] = None
+    affected_zones: Optional[List[int]] = None
+    explanation: Optional[str] = None
 
 class RecommendationActionRequest(BaseModel):
     reason: Optional[str] = None

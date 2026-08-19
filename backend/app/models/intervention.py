@@ -14,7 +14,7 @@ These models ensure that the AI cannot independently act. All authority
 decisions, including reasons and expected effects, are securely audited.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 import enum
 
 from sqlalchemy import Column, DateTime, Enum, Float, ForeignKey, Integer, String, Text, JSON
@@ -74,8 +74,8 @@ class Intervention(Base):
     
     affected_zones = Column(JSON, nullable=False, default=list)
 
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.utcnow(), nullable=False)
-    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.utcnow(), onupdate=lambda: datetime.utcnow(), nullable=False)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
 
     # Relationships
     actions = relationship("InterventionAction", back_populates="intervention", cascade="all, delete-orphan")
@@ -121,7 +121,7 @@ class InterventionResult(Base):
     intervention_id = Column(Integer, ForeignKey("interventions.id"), nullable=False, index=True, unique=True)
     
     approved_by_user_id = Column(Integer, nullable=False, index=True)
-    approved_at = Column(DateTime(timezone=True), default=lambda: datetime.utcnow(), nullable=False)
+    approved_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
     
     simulation_scenario_used = Column(String(100), nullable=True)
     expected_effect = Column(Text, nullable=True)
@@ -130,5 +130,22 @@ class InterventionResult(Base):
     decision_reason = Column(Text, nullable=False)
 
     intervention = relationship("Intervention", back_populates="result")
+
+
+class InterventionAudit(Base):
+    """
+    Append-only audit trail for intervention state transitions.
+    """
+    __tablename__ = "intervention_audits"
+
+    id = Column(Integer, primary_key=True, index=True)
+    intervention_id = Column(Integer, ForeignKey("interventions.id"), nullable=False, index=True)
+    action = Column(String(50), nullable=False)
+    actor_user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    previous_status = Column(Enum(InterventionStatus), nullable=True)
+    new_status = Column(Enum(InterventionStatus), nullable=False)
+    timestamp = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+
+    intervention = relationship("Intervention", back_populates="audit_trail")
 
 

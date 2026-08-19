@@ -6,6 +6,7 @@ from datetime import datetime
 from pydantic import BaseModel, Field
 
 from app.models.zone import ZoneStatus
+from app.models.zone_connection import ConnectionStatus
 
 
 class ZoneCreate(BaseModel):
@@ -29,5 +30,6 @@ class ZoneConnectionResponse(BaseModel):
     distance: float
     capacity: int
     is_bidirectional: bool
+    status: ConnectionStatus
 
     model_config = {"from_attributes": True}

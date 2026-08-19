@@ -31,8 +31,10 @@ from app.schemas.crowd_reading import CrowdReadingCreate, CrowdReadingResponse
 from app.ai.risk_engine.engine import RiskEngine
 from app.ai.risk_engine.models import RiskAssessment, RiskFeatures, RiskLevel, RiskType
 from app.ai.prediction_engine.engine import PredictionEngine
-from app.ai.prediction_engine.models import PredictionResult
+from app.ai.prediction_engine.models import PredictionResult, PropagationResult
+from app.ai.prediction_engine.propagation import NetworkPropagationEngine
 from app.services.crowd_intelligence_service import CrowdIntelligenceService
+from app.services.routing_service import RoutingService
 from app.schemas.crowd_intelligence import EventCrowdIntelligence
 
 
@@ -58,6 +60,7 @@ class CrowdIngestionService:
         self._db = db
         self._risk_engine = RiskEngine()
         self._prediction_engine = PredictionEngine()
+        self._network_engine = NetworkPropagationEngine()
         self._intelligence_service = CrowdIntelligenceService()
 
     # ------------------------------------------------------------------
@@ -80,19 +83,20 @@ class CrowdIngestionService:
         # 2. Persist CrowdReading
         crowd_reading_response = await self._persist_crowd_reading(data)
 
-        # 3. Risk evaluation
-        risk_assessment = self._risk_engine.evaluate(crowd_reading_response)
+        # 3. Load historical risk assessments for risk evaluation and prediction
+        history = await self._load_risk_history(data.event_id, data.zone_id)
 
-        # 4. Persist RiskAssessmentRecord
+        # 4. Risk evaluation (with hysteresis & multi-signal using history)
+        risk_assessment = self._risk_engine.evaluate(crowd_reading_response, history)
+
+        # 5. Persist RiskAssessmentRecord
         await self._persist_risk_assessment(
             risk_assessment, crowd_reading_response.id, crowd_reading_response.timestamp
         )
 
-        # 5. Load historical risk assessments for prediction
-        history = await self._load_risk_history(data.event_id, data.zone_id)
-
-        # 6. Run prediction
-        prediction_result = self._prediction_engine.predict(history)
+        # 6. Run prediction (include the new assessment in the history)
+        prediction_history = [risk_assessment] + history
+        prediction_result = self._prediction_engine.predict(prediction_history)
 
         # 7. Build event-wide intelligence
         intelligence = await self._aggregate_intelligence(data.event_id)
@@ -356,4 +360,36 @@ class CrowdIngestionService:
             assessments.append(assessment_pydantic)
             predictions.append(prediction)
 
-        return self._intelligence_service.aggregate(event_id, readings, assessments, predictions, active_incidents=active_incidents)
+        # Build network graph and run propagation
+        network_trace: List[PropagationResult] = []
+        try:
+            # Reconstruct the current network graph
+            venue_graph = await RoutingService.build_venue_graph(self._db, event_id)
+            
+            # Hydrate graph with live readings/assessments we just fetched
+            current_assessments = {}
+            for schema, ass in zip(readings, assessments):
+                node_id = str(schema.zone_id)
+                if node_id in venue_graph.nodes:
+                    venue_graph.nodes[node_id].current_crowd = schema.person_count
+                    venue_graph.nodes[node_id].risk_score = ass.score
+                current_assessments[node_id] = ass
+                
+            # Forecast propagation (15 minutes into future)
+            _, network_trace = self._network_engine.forecast_network_risk(
+                venue_graph, current_assessments, horizon_minutes=15
+            )
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Network propagation failed for event {event_id}: {str(e)}")
+            # Fail-safe: empty trace, local predictions still proceed
+
+        return self._intelligence_service.aggregate(
+            event_id, 
+            readings, 
+            assessments, 
+            predictions, 
+            active_incidents=active_incidents,
+            propagation_results=network_trace
+        )
