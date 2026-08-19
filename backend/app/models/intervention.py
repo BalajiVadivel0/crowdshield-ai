@@ -81,7 +81,6 @@ class Intervention(Base):
     actions = relationship("InterventionAction", back_populates="intervention", cascade="all, delete-orphan")
     result = relationship("InterventionResult", back_populates="intervention", uselist=False, cascade="all, delete-orphan")
 
-
 class InterventionAction(Base):
     """
     A specific action recommended as part of an intervention.
@@ -131,3 +130,5 @@ class InterventionResult(Base):
     decision_reason = Column(Text, nullable=False)
 
     intervention = relationship("Intervention", back_populates="result")
+
+

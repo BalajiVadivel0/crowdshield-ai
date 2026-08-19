@@ -11,8 +11,8 @@ CrowdIntelligenceService.
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.dependencies import get_db, RequireRole
-from app.models.user import UserRole
+from app.api.dependencies import get_db, RequireRole, get_current_user, verify_event_access
+from app.models.user import User, UserRole
 from app.schemas.crowd_intelligence import EventCrowdIntelligence
 from app.services.crowd_ingestion_service import CrowdIngestionService
 
@@ -23,6 +23,7 @@ router = APIRouter()
 async def get_event_intelligence(
     event_id: int,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Retrieve the current event-level crowd intelligence snapshot.
@@ -30,6 +31,7 @@ async def get_event_intelligence(
     Aggregates the most recent readings and risk assessments across all zones
     in the event. Returns an empty snapshot if no data has been ingested yet.
     """
+    verify_event_access(event_id, current_user)
     service = CrowdIngestionService(db)
     try:
         intelligence = await service._aggregate_intelligence(event_id)

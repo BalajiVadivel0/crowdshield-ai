@@ -56,6 +56,9 @@ async def create_crowd_reading(
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
     except Exception as exc:
+        print(f"PIPELINE EXCEPTION: {exc}")
+        import traceback
+        traceback.print_exc()
         # Do not leak internal state; log in production
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

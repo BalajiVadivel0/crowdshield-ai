@@ -45,6 +45,8 @@ async def test_full_phase1_pipeline(app):
         }
         
         res_ingest = await client.post("/api/v1/crowd-readings/", json=reading_data)
+        if res_ingest.status_code != 201:
+            print(f"FAILED TO INGEST: {res_ingest.text}")
         assert res_ingest.status_code == 201
         ingestion = res_ingest.json()
         

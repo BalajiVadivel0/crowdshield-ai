@@ -77,7 +77,8 @@ class RealtimeEventService:
         
         await manager.broadcast_authority(
             event_type=WSEventType.CROWD_INTELLIGENCE_UPDATE.value,
-            payload=payload
+            payload=payload,
+            event_id=intelligence.event_id
         )
         logger.info(f"Broadcasted Authority intelligence for event_id={intelligence.event_id}")
 
@@ -103,12 +104,14 @@ class RealtimeEventService:
             await manager.broadcast_citizen_zone(
                 zone_id=alert.zone_id,
                 event_type=WSEventType.ALERT_NOTIFICATION.value,
-                payload=payload
+                payload=payload,
+                event_id=alert.event_id
             )
             logger.info(f"Broadcasted Citizen Alert {alert.id} to zone_id={alert.zone_id}")
         elif alert.target_role.value == "AUTHORITY":
             await manager.broadcast_authority(
                 event_type=WSEventType.ALERT_NOTIFICATION.value,
-                payload=payload
+                payload=payload,
+                event_id=alert.event_id
             )
             logger.info(f"Broadcasted Authority Alert {alert.id} for event_id={alert.event_id}")

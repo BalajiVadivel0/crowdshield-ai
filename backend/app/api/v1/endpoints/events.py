@@ -33,16 +33,38 @@ async def create_event(
     return db_event
 
 
-@router.get("/", response_model=List[EventResponse], dependencies=[Depends(get_current_user)])
-async def list_events(db: AsyncSession = Depends(get_db)):
-    """List all events."""
-    result = await db.execute(select(Event))
+from app.models.user import UserRole, User
+
+@router.get("/", response_model=List[EventResponse])
+async def list_events(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """List all events allowed for the user."""
+    stmt = select(Event)
+    
+    if current_user.role != UserRole.ADMIN:
+        if current_user.assigned_event_id:
+            stmt = stmt.where(Event.id == current_user.assigned_event_id)
+        else:
+            # If a non-admin has no assigned event, they shouldn't see any events
+            return []
+
+    result = await db.execute(stmt)
     return list(result.scalars().all())
 
 
-@router.get("/{event_id}", response_model=EventResponse, dependencies=[Depends(get_current_user)])
-async def get_event(event_id: int, db: AsyncSession = Depends(get_db)):
+@router.get("/{event_id}", response_model=EventResponse)
+async def get_event(
+    event_id: int, 
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     """Get a specific event."""
+    if current_user.role != UserRole.ADMIN:
+        if not current_user.assigned_event_id or current_user.assigned_event_id != event_id:
+            raise HTTPException(status_code=403, detail="Not authorized to access this event")
+            
     result = await db.execute(select(Event).where(Event.id == event_id))
     event = result.scalar_one_or_none()
     if not event:

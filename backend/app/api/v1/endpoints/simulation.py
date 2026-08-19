@@ -3,8 +3,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from typing import Any
 
-from app.api.dependencies import get_db, RequireRole
-from app.models.user import UserRole
+from app.api.dependencies import get_db, RequireRole, verify_event_access
+from app.models.user import User, UserRole
 from app.models.zone import Zone
 from app.schemas.simulation import SimulationRequest, SimulationResponse
 from app.ai.simulation.service import CrowdSimulationService
@@ -15,11 +15,13 @@ router = APIRouter()
 async def run_simulation(
     request: SimulationRequest,
     db: AsyncSession = Depends(get_db),
-    _=Depends(RequireRole([UserRole.AUTHORITY]))
+    current_user: User = Depends(RequireRole([UserRole.AUTHORITY]))
 ) -> Any:
     """
     Run a simulation for a specific event and zone (AUTHORITY only).
     """
+    verify_event_access(request.event_id, current_user)
+    
     # Validate zone and get capacity
     stmt = select(Zone).where(Zone.id == request.zone_id, Zone.event_id == request.event_id)
     res = await db.execute(stmt)

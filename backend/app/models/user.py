@@ -16,6 +16,9 @@ class User(Base):
     hashed_password = Column(String, nullable=False)
     role = Column(Enum(UserRole), default=UserRole.CITIZEN, nullable=False)
     is_active = Column(Boolean, default=True)
+    assigned_event_id = Column(Integer, nullable=True, index=True)
+    assigned_zone_id = Column(Integer, nullable=True, index=True)
     
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
     updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
+

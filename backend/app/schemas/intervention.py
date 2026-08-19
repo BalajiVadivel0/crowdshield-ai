@@ -6,8 +6,22 @@ Defines the API contracts for creating, updating, and viewing interventions.
 
 from datetime import datetime
 from typing import List, Optional
-
+from datetime import datetime
 from pydantic import BaseModel, Field
+
+class AuditLogResponse(BaseModel):
+    id: int
+    timestamp: datetime
+    actor_user_id: Optional[int] = None
+    actor_role: Optional[str] = None
+    action: str
+    previous_state: Optional[str] = None
+    new_state: Optional[str] = None
+    reason: Optional[str] = None
+    metadata_: Optional[dict] = None
+
+    class Config:
+        from_attributes = True
 
 from app.models.intervention import InterventionStatus
 
@@ -60,19 +74,16 @@ class InterventionCreate(BaseModel):
 # --- Approval / Rejection / Cancellation / Completion ---
 
 class ApprovalRequest(BaseModel):
-    user_id: int = Field(..., description="ID of the authority user approving.")
     scenario: Optional[str] = Field(None, description="Simulation scenario used for decision.")
     expected_effect: Optional[str] = Field(None, description="Expected outcome.")
     decision_reason: str = Field(..., description="Required explanation for the decision.")
 
 
 class RejectRequest(BaseModel):
-    user_id: int
     decision_reason: str
 
 
 class CancelRequest(BaseModel):
-    user_id: int
     decision_reason: str
 
 

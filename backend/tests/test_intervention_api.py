@@ -2,12 +2,10 @@ import pytest
 from fastapi.testclient import TestClient
 from app.main import app
 from app.models.intervention import InterventionStatus
-
+from app.models.user import UserRole
 
 @pytest.fixture
 def client(app):
-    # Provide a simple test client using the app fixture
-    # The app fixture overrides get_db to use our sqlite db_session
     return TestClient(app)
 
 
@@ -69,7 +67,6 @@ def test_full_lifecycle_api(client: TestClient, intervention_payload):
     
     # 4. Approve
     app_payload = {
-        "user_id": 42,
         "scenario": "SIM_1",
         "expected_effect": "Low risk",
         "decision_reason": "Approved by protocol"
@@ -102,7 +99,6 @@ def test_invalid_transition_api(client: TestClient, intervention_payload):
     
     # Try to approve without PENDING_APPROVAL
     app_payload = {
-        "user_id": 42,
         "decision_reason": "skip steps"
     }
     resp = client.post(f"/api/v1/interventions/{inv_id}/approve", json=app_payload)

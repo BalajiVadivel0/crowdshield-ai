@@ -46,10 +46,18 @@ async def get_alerts(
     query = select(Alert).where(
         Alert.target_role == current_user.role,
         Alert.expires_at > now
-    ).order_by(Alert.created_at.desc())
+    )
+    
+    if current_user.role != UserRole.ADMIN and current_user.assigned_event_id:
+        query = query.where(Alert.event_id == current_user.assigned_event_id)
+        
+    query = query.order_by(Alert.created_at.desc())
 
-    if current_user.role == UserRole.CITIZEN and zone_id is not None:
-        query = query.where(or_(Alert.zone_id == zone_id, Alert.zone_id.is_(None)))
+    if current_user.role == UserRole.CITIZEN:
+        if current_user.assigned_zone_id is not None:
+            query = query.where(or_(Alert.zone_id == current_user.assigned_zone_id, Alert.zone_id.is_(None)))
+        else:
+            query = query.where(Alert.zone_id.is_(None))
 
     result = await db.execute(query)
     alerts = result.scalars().all()
@@ -97,6 +105,9 @@ async def mark_alert_read(
     """
     # Verify alert exists and is targeted to user role
     query = select(Alert).where(Alert.id == alert_id, Alert.target_role == current_user.role)
+    if current_user.role != UserRole.ADMIN and current_user.assigned_event_id:
+        query = query.where(Alert.event_id == current_user.assigned_event_id)
+        
     result = await db.execute(query)
     alert = result.scalar_one_or_none()
     
@@ -135,6 +146,10 @@ async def mark_all_alerts_read(
         Alert.target_role == current_user.role,
         Alert.expires_at > now
     )
+    
+    if current_user.role != UserRole.ADMIN and current_user.assigned_event_id:
+        query = query.where(Alert.event_id == current_user.assigned_event_id)
+        
     result = await db.execute(query)
     active_alert_ids = result.scalars().all()
     
@@ -159,7 +174,73 @@ async def mark_all_alerts_read(
             read_at=now
         ))
 
-    if unread_ids:
         await db.commit()
         
     return {"status": "ok", "marked_count": len(unread_ids)}
+
+@router.get("/sync", response_model=List[AlertResponse])
+async def sync_alerts(
+    since_timestamp: datetime = Query(..., description="Fetch alerts created after this timestamp"),
+    zone_id: Optional[int] = Query(None, description="Optional zone ID filter for citizens"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Catch-up endpoint for clients to fetch alerts missed during a WebSocket disconnection.
+    """
+    now = datetime.now(timezone.utc)
+    
+    # Ensure since_timestamp has timezone info
+    if since_timestamp.tzinfo is None:
+        since_timestamp = since_timestamp.replace(tzinfo=timezone.utc)
+        
+    query = select(Alert).where(
+        Alert.target_role == current_user.role,
+        Alert.created_at > since_timestamp,
+        Alert.expires_at > now
+    )
+    
+    if current_user.role != UserRole.ADMIN and current_user.assigned_event_id:
+        query = query.where(Alert.event_id == current_user.assigned_event_id)
+        
+    query = query.order_by(Alert.created_at.desc())
+
+    if current_user.role == UserRole.CITIZEN:
+        if current_user.assigned_zone_id is not None:
+            query = query.where(or_(Alert.zone_id == current_user.assigned_zone_id, Alert.zone_id.is_(None)))
+        else:
+            query = query.where(Alert.zone_id.is_(None))
+
+    result = await db.execute(query)
+    alerts = result.scalars().all()
+    
+    if not alerts:
+        return []
+
+    # Fetch read states
+    alert_ids = [a.id for a in alerts]
+    read_query = select(AlertRead.alert_id).where(
+        AlertRead.user_id == current_user.id,
+        AlertRead.alert_id.in_(alert_ids)
+    )
+    read_result = await db.execute(read_query)
+    read_alert_ids = set(read_result.scalars().all())
+
+    response = []
+    for a in alerts:
+        alert_dict = {
+            "id": a.id,
+            "event_id": a.event_id,
+            "zone_id": a.zone_id,
+            "target_role": a.target_role,
+            "alert_type": a.alert_type.value,
+            "severity": a.severity.value,
+            "title": a.title,
+            "message": a.message,
+            "created_at": a.created_at,
+            "expires_at": a.expires_at,
+            "is_read": a.id in read_alert_ids
+        }
+        response.append(AlertResponse(**alert_dict))
+
+    return response

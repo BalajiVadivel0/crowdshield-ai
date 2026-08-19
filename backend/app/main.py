@@ -1,4 +1,7 @@
-from fastapi import FastAPI
+import traceback
+from fastapi.responses import JSONResponse
+from fastapi import Request, FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.api.v1.endpoints import interventions, incidents, ws, events, zones, crowd_readings, risk, intelligence, auth, routing, simulation, alerts, recommendations
 
@@ -6,6 +9,23 @@ app = FastAPI(
     title=settings.PROJECT_NAME,
     version=settings.VERSION,
     openapi_url=f"{settings.API_V1_STR}/openapi.json"
+)
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    tb = traceback.format_exc()
+    print("GLOBAL EXCEPTION:", tb)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal Server Error", "traceback": tb}
+    )
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Adjust this in production
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 app.include_router(auth.router, prefix=f"{settings.API_V1_STR}/auth", tags=["auth"])

@@ -35,6 +35,7 @@ void main() {
 
       if (changed) {
         entity.writeAsStringSync(content);
+        // ignore: avoid_print
         print('Updated: ${entity.path}');
       }
     }

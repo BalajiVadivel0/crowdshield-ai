@@ -16,8 +16,8 @@ from sqlalchemy import select, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 
-from app.api.dependencies import get_db, RequireRole
-from app.models.user import UserRole
+from app.api.dependencies import get_db, RequireRole, get_current_user, verify_event_access
+from app.models.user import User, UserRole
 from app.models.risk_assessment import RiskAssessmentRecord
 
 
@@ -59,12 +59,15 @@ async def get_latest_risk(
     event_id: int,
     zone_id: int,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Retrieve the latest persisted risk assessment for a specific zone.
 
     Returns 404 if no crowd reading has been ingested for this event/zone yet.
     """
+    verify_event_access(event_id, current_user)
+    
     result = await db.execute(
         select(RiskAssessmentRecord)
         .where(

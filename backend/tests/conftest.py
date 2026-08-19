@@ -48,9 +48,9 @@ async def db_session():
         yield session
 
 @pytest.fixture
-def async_client():
-    # Wait, the tests actually use a synchronous TestClient now.
-    pass
+def client(app):
+    with TestClient(app) as test_client:
+        yield test_client
 
 @pytest.fixture
 def app(db_session):
@@ -63,7 +63,9 @@ def app(db_session):
             id=1,
             email="test_authority@example.com",
             hashed_password="mocked_hash",
-            role=UserRole.AUTHORITY
+            role=UserRole.AUTHORITY,
+            assigned_event_id=1,
+            assigned_zone_id=10
         )
         return user
 

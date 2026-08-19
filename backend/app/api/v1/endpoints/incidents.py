@@ -3,7 +3,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.dependencies import get_db, get_current_user, require_authority
+from app.api.dependencies import get_db, get_current_user, require_authority, verify_event_access
 from app.models.user import User
 from app.schemas.incident import IncidentReportCreate, IncidentReportResponse, IncidentStatusUpdate
 from app.services.incident_service import IncidentService
@@ -35,8 +35,15 @@ async def list_incidents(
     
     # If not authority, only return their own incidents
     user_id_filter = None
-    if current_user.role != "AUTHORITY":
+    if current_user.role != "AUTHORITY" and current_user.role.value != "AUTHORITY":
         user_id_filter = current_user.id
+    elif current_user.role.value == "AUTHORITY" and event_id is None:
+        # If authority doesn't specify event, default to their assigned event
+        if current_user.assigned_event_id:
+            event_id = current_user.assigned_event_id
+            
+    if event_id is not None:
+        verify_event_access(event_id, current_user)
         
     return await service.list_incidents(event_id, zone_id, user_id=user_id_filter)
 
@@ -53,8 +60,12 @@ async def get_incident(
     if not incident:
         raise HTTPException(status_code=404, detail="Incident not found")
         
-    if current_user.role != "AUTHORITY" and incident.user_id != current_user.id:
+    if current_user.role.value != "AUTHORITY" and incident.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Forbidden: You do not have access to this incident")
+        
+    if current_user.role.value == "AUTHORITY":
+        # Check if authority has access to this event
+        verify_event_access(incident.event_id, current_user)
         
     return incident
 
@@ -63,9 +74,16 @@ async def get_incident(
 async def update_incident_status(
     incident_id: int,
     status_update: IncidentStatusUpdate,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """Update the status of an incident report."""
+    service = IncidentService(db)
+    incident = await service.get_incident(incident_id)
+    if not incident:
+        raise HTTPException(status_code=404, detail="Incident not found")
+        
+    verify_event_access(incident.event_id, current_user)
     service = IncidentService(db)
     try:
         return await service.update_status(incident_id, status_update)

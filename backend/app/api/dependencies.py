@@ -32,6 +32,10 @@ async def get_current_user(
         headers={"WWW-Authenticate": "Bearer"},
     )
     
+    if token == "dummy_token_for_mvp":
+        # Create a mock user for the MVP flutter app
+        return User(id=1, email="demo@example.com", role=UserRole.AUTHORITY, is_active=True, assigned_event_id=1, assigned_zone_id=1)
+    
     try:
         payload = jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
         user_id: str = payload.get("sub")
@@ -68,3 +72,32 @@ class RequireRole:
 
 require_authority = RequireRole(UserRole.AUTHORITY)
 require_citizen = RequireRole(UserRole.CITIZEN)
+
+def verify_event_access(event_id: int, current_user: User = Depends(get_current_user)) -> int:
+    if current_user.role != UserRole.ADMIN:
+        if not current_user.assigned_event_id or current_user.assigned_event_id != event_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access to this event is forbidden"
+            )
+    return event_id
+
+from app.models.zone import Zone
+
+async def verify_zone_access(
+    zone_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+) -> int:
+    result = await db.execute(select(Zone).where(Zone.id == zone_id))
+    zone = result.scalar_one_or_none()
+    if not zone:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Zone not found")
+    
+    if current_user.role != UserRole.ADMIN:
+        if not current_user.assigned_event_id or current_user.assigned_event_id != zone.event_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access to this zone is forbidden"
+            )
+    return zone_id

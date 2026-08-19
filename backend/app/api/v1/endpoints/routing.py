@@ -2,8 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Any
 
-from app.api.dependencies import get_db, RequireRole
-from app.models.user import UserRole
+from app.models.user import User, UserRole
+from app.api.dependencies import get_db, RequireRole, get_current_user, verify_event_access
 from app.schemas.routing import SafeRouteRequest, SafeRouteResponse
 from app.services.routing_service import RoutingService
 
@@ -13,11 +13,13 @@ router = APIRouter()
 async def get_safe_route(
     request: SafeRouteRequest,
     db: AsyncSession = Depends(get_db),
-    _=Depends(RequireRole([UserRole.CITIZEN, UserRole.AUTHORITY]))
+    current_user: User = Depends(RequireRole([UserRole.CITIZEN, UserRole.AUTHORITY]))
 ) -> Any:
     """
     Get a safe route from start to destination, or to the safest exit if destination is omitted.
     """
+    verify_event_access(request.event_id, current_user)
+    
     if request.destination_zone_id is not None:
         result = await RoutingService.get_safe_route(
             db=db,
@@ -49,11 +51,13 @@ async def get_safest_exit(
     event_id: int,
     zone_id: int,
     db: AsyncSession = Depends(get_db),
-    _=Depends(RequireRole([UserRole.CITIZEN, UserRole.AUTHORITY]))
+    current_user: User = Depends(RequireRole([UserRole.CITIZEN, UserRole.AUTHORITY]))
 ) -> Any:
     """
     Get the safest exit from the given zone.
     """
+    verify_event_access(event_id, current_user)
+    
     result = await RoutingService.get_safest_exit(
         db=db,
         event_id=event_id,

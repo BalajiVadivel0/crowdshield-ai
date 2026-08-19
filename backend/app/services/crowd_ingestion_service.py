@@ -126,7 +126,8 @@ class CrowdIngestionService:
             }
             await manager.broadcast_authority(
                 event_type=WSEventType.RECOMMENDATIONS_UPDATE.value,
-                payload=payload
+                payload=payload,
+                event_id=intelligence.event_id
             )
 
         return crowd_reading_response, risk_assessment, prediction_result, intelligence

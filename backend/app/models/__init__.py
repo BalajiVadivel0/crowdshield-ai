@@ -10,5 +10,6 @@ from app.models.alert import Alert, AlertType, AlertSeverity
 from app.models.incident import IncidentReport, IncidentType, IncidentSeverity, IncidentStatus
 from app.models.announcement import Announcement, AnnouncementChannel, AnnouncementPriority
 from app.models.recommendation import RecommendationModel, RecommendationStatus
+from app.models.audit import AuditLog
 
 # Import all models here so Alembic can detect them
